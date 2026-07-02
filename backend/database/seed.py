@@ -56,32 +56,47 @@ def seed():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        if db.query(models.Book).count() > 0:
+        has_books = db.query(models.Book).count() > 0
+        has_staff = db.query(models.Librarian).count() + db.query(models.SuperAdmin).count() > 0
+        has_students = db.query(models.Student).count() > 0
+        has_loans = db.query(models.Loan).count() > 0
+        has_logs = db.query(models.TxLog).count() > 0
+
+        if has_books and has_staff and has_students and has_loans and has_logs:
             print("Database already seeded — skipping.")
             return
 
         book_rows: dict[str, models.Book] = {}
-        for i, (title, author, isbn, genre, total, available) in enumerate(BOOKS, start=1):
-            book = models.Book(id=f"B-{i:05d}", title=title, author=author, isbn=isbn, genre=genre,
-                                total=total, available=available)
-            db.add(book)
-            book_rows[title] = book
+        if not has_books:
+            for i, (title, author, isbn, genre, total, available) in enumerate(BOOKS, start=1):
+                book = models.Book(id=f"B-{i:05d}", title=title, author=author, isbn=isbn, genre=genre,
+                                    total=total, available=available)
+                db.add(book)
+                book_rows[title] = book
+        else:
+            for book in db.query(models.Book).all():
+                book_rows[book.title] = book
 
-        for login_id, name, password, role in STAFF_ACCOUNTS:
-            if role == "librarian":
-                db.add(models.Librarian(login_id=login_id, name=name,
-                                         hashed_password=hash_password(password)))
-            else:
-                db.add(models.SuperAdmin(login_id=login_id, name=name,
-                                          hashed_password=hash_password(password)))
+        if not has_staff:
+            for login_id, name, password, role in STAFF_ACCOUNTS:
+                if role == "librarian":
+                    db.add(models.Librarian(login_id=login_id, name=name,
+                                             hashed_password=hash_password(password)))
+                else:
+                    db.add(models.SuperAdmin(login_id=login_id, name=name,
+                                              hashed_password=hash_password(password)))
 
         student_rows: dict[str, models.Student] = {}
-        for login_id, name, password, email, course, section, year_level in STUDENTS:
-            student = models.Student(login_id=login_id, name=name,
-                                      hashed_password=hash_password(password),
-                                      email=email, course=course, section=section, year_level=year_level)
-            db.add(student)
-            student_rows[login_id] = student
+        if not has_students:
+            for login_id, name, password, email, course, section, year_level in STUDENTS:
+                student = models.Student(login_id=login_id, name=name,
+                                          hashed_password=hash_password(password),
+                                          email=email, course=course, section=section, year_level=year_level)
+                db.add(student)
+                student_rows[login_id] = student
+        else:
+            for student in db.query(models.Student).all():
+                student_rows[student.login_id] = student
 
         db.flush()  # assign IDs before creating loans
 
