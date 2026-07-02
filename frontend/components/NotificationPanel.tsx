@@ -24,7 +24,7 @@ export function NotificationPanel({ user, loans, onClose, onNavigate }: NotifPan
 
   const adminTotal = pendingBorrows.length + pendingReturns.length + overdueLoans.length;
   const studentTotal = myOverdue.length + myUpcoming.length;
-  const isEmpty = user.role === "librarian" ? adminTotal === 0 : studentTotal === 0;
+  const isEmpty = user.role !== "student" ? adminTotal === 0 : studentTotal === 0;
 
   return (
     <>
