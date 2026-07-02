@@ -28,17 +28,40 @@ export const useBookStore = create<BookState>((set, get) => ({
   },
 
   addBook: async (form) => {
-    const book = await bookService.create(form);
-    set({ books: [...get().books, book] });
+    set({ isLoading: true, error: null });
+    try {
+      const book = await bookService.create(form);
+      set({ books: [...get().books, book], isLoading: false });
+      return book;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to add book.";
+      set({ error: message, isLoading: false });
+      throw err;
+    }
   },
 
   editBook: async (id, form) => {
-    const updated = await bookService.update(id, form);
-    set({ books: get().books.map((b) => (b.id === id ? updated : b)) });
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await bookService.update(id, form);
+      set({ books: get().books.map((b) => (b.id === id ? updated : b)), isLoading: false });
+      return updated;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to update book.";
+      set({ error: message, isLoading: false });
+      throw err;
+    }
   },
 
   deleteBook: async (id) => {
-    await bookService.remove(id);
-    set({ books: get().books.filter((b) => b.id !== id) });
+    set({ isLoading: true, error: null });
+    try {
+      await bookService.remove(id);
+      set({ books: get().books.filter((b) => b.id !== id), isLoading: false });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to delete book.";
+      set({ error: message, isLoading: false });
+      throw err;
+    }
   },
 }));

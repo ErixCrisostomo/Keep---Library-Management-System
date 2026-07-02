@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -13,6 +14,15 @@ from models import models
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+
+@dataclass
+class CurrentUser:
+    """Unified view over a Student or Staff row, so downstream code doesn't care which table it came from."""
+    id: str
+    login_id: str
+    name: str
+    role: str  # "student" | "librarian" | "superadmin"
 
 
 def hash_password(password: str) -> str:
@@ -40,7 +50,7 @@ def decode_access_token(token: str) -> dict:
     )
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        if payload.get("sub") is None:
+        if payload.get("sub") is None or payload.get("role") is None:
             raise credentials_exception
         return payload
     except JWTError:
@@ -49,15 +59,24 @@ def decode_access_token(token: str) -> dict:
 
 def get_current_user(
     token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
-) -> models.User:
+) -> CurrentUser:
     payload = decode_access_token(token)
-    user = db.query(models.User).filter(models.User.id == payload["sub"]).first()
-    if user is None:
+    role = payload["role"]
+    if role == "student":
+        row = db.query(models.Student).filter(models.Student.id == payload["sub"]).first()
+        if row is None:
+            raise HTTPException(status_code=401, detail="User not found")
+        return CurrentUser(id=row.id, login_id=row.login_id, name=row.name, role="student")
+
+    row = db.query(models.Librarian).filter(models.Librarian.id == payload["sub"]).first()
+    if row is None:
+        row = db.query(models.SuperAdmin).filter(models.SuperAdmin.id == payload["sub"]).first()
+    if row is None:
         raise HTTPException(status_code=401, detail="User not found")
-    return user
+    return CurrentUser(id=row.id, login_id=row.login_id, name=row.name, role=row.role)
 
 
-def require_librarian(user: models.User = Depends(get_current_user)) -> models.User:
-    if user.role != "librarian":
+def require_librarian(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    if user.role not in ("librarian", "superadmin"):
         raise HTTPException(status_code=403, detail="Librarian access required")
     return user

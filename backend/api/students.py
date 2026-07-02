@@ -3,15 +3,14 @@ from sqlalchemy.orm import Session
 
 from core.security import require_librarian, CurrentUser
 from database.database import get_db
-from models import schemas
-from services import loan_service
+from models import models, schemas
 
-router = APIRouter(prefix="/api/reports", tags=["reports"])
+router = APIRouter(prefix="/api/students", tags=["students"])
 
 
-@router.get("/summary", response_model=schemas.ReportSummary)
-def summary(
+@router.get("", response_model=list[schemas.StudentProfileOut])
+def list_students(
     db: Session = Depends(get_db),
     _: CurrentUser = Depends(require_librarian),
 ):
-    return loan_service.get_report_summary(db)
+    return db.query(models.Student).order_by(models.Student.name).all()

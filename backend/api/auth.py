@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from core.security import get_current_user
+from core.security import get_current_user, CurrentUser
 from database.database import get_db
-from models import models, schemas
+from models import schemas
 from services import auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -19,5 +19,5 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=schemas.UserOut)
-def me(current_user: models.User = Depends(get_current_user)):
+def me(current_user: CurrentUser = Depends(get_current_user)):
     return current_user

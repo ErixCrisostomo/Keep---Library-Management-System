@@ -26,7 +26,12 @@ def list_books(
     query = db.query(models.Book)
     if search:
         like = f"%{search}%"
-        query = query.filter(or_(models.Book.title.ilike(like), models.Book.author.ilike(like)))
+        query = query.filter(or_(
+            models.Book.title.ilike(like),
+            models.Book.author.ilike(like),
+            models.Book.isbn.ilike(like),
+            models.Book.id.ilike(like),
+        ))
     if genre and genre != "All":
         query = query.filter(models.Book.genre == genre)
     if available_only:

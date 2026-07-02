@@ -18,9 +18,15 @@ export function LoginScreen() {
     setError("");
     try {
       const user = await login(identifier.trim(), password);
-      router.push(user.role === "librarian" ? "/librarian" : "/student");
+      router.push(
+        user.role === "librarian"
+          ? "/librarian"
+          : user.role === "superadmin"
+          ? "/superadmin"
+          : "/student"
+      );
     } catch {
-      setError("Invalid credentials. Please check your Email or Student Number and password.");
+      setError("Invalid credentials. Please check your email or student number and password.");
     }
   };
 
@@ -28,9 +34,9 @@ export function LoginScreen() {
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex w-24 h-24 items-center justify-center mb-4">
+          <div className="inline-flex w-14 h-14 items-center justify-center mb-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/keep-logo.png" alt="Keep logo" className="w-24 h-24 object-contain" style={{ mixBlendMode: "multiply" }} />
+            <img src="/keep-logo.png" alt="Keep logo" className="w-14 h-14 object-contain" style={{ mixBlendMode: "multiply" }} />
           </div>
           <h1 className="text-3xl font-semibold text-foreground tracking-tight font-serif">Keep</h1>
           <p className="text-sm text-muted-foreground mt-1">Library Management System</p>
@@ -68,6 +74,7 @@ export function LoginScreen() {
           <div className="flex flex-col gap-1 font-mono">
             <div><span className="text-primary">Librarian:</span> juandelacruz@email.com · lib123</div>
             <div><span className="text-primary">Student:</span> 22-22222 · student1</div>
+            <div><span className="text-primary">Superadmin:</span> mainadmin@email.com · admin1</div>
           </div>
         </div>
       </div>

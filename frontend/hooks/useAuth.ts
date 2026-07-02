@@ -28,7 +28,13 @@ export function useRequireRole(requiredRole: Role) {
     if (!user) {
       router.replace("/");
     } else if (user.role !== requiredRole) {
-      router.replace(user.role === "librarian" ? "/librarian" : "/student");
+      router.replace(
+        user.role === "librarian"
+          ? "/librarian"
+          : user.role === "superadmin"
+          ? "/superadmin"
+          : "/student"
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checked, user]);

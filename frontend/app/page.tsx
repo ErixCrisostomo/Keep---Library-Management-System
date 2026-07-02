@@ -11,7 +11,9 @@ export default function HomePage() {
 
   useEffect(() => {
     if (checked && user) {
-      router.replace(user.role === "librarian" ? "/librarian" : "/student");
+      router.replace(
+        user.role === "librarian" ? "/librarian" : user.role === "superadmin" ? "/superadmin" : "/student"
+      );
     }
   }, [checked, user, router]);
 

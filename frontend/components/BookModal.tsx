@@ -6,8 +6,8 @@ import { Book, BookForm } from "@/lib/types";
 import { GENRES_LIST, EMPTY_BOOK_FORM, validateISBN } from "@/lib/constants";
 
 export function BookModal({
-  book, onClose, onSave,
-}: { book: Book | null; onClose: () => void; onSave: (f: BookForm) => void }) {
+  book, onClose, onSave, saving = false, errorMessage = "",
+}: { book: Book | null; onClose: () => void; onSave: (f: BookForm) => Promise<void>; saving?: boolean; errorMessage?: string }) {
   const [form, setForm] = useState<BookForm>(
     book ? { title: book.title, author: book.author, isbn: book.isbn, genre: book.genre, total: String(book.total) } : EMPTY_BOOK_FORM
   );
@@ -19,7 +19,9 @@ export function BookModal({
   const validate = () => {
     const e: Partial<BookForm> = {};
     if (!form.title.trim()) e.title = "Required.";
+    else if (form.title.length > 120) e.title = "Keep it under 120 characters.";
     if (!form.author.trim()) e.author = "Required.";
+    else if (form.author.length > 80) e.author = "Keep it under 80 characters.";
     if (!validateISBN(form.isbn)) e.isbn = "Must be 10 or 13 digits.";
     const n = Number(form.total);
     if (!form.total || isNaN(n) || n < 1) e.total = "Must be a positive number.";
@@ -35,18 +37,27 @@ export function BookModal({
           <button onClick={onClose} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg"><X size={15} /></button>
         </div>
         <div className="p-5 flex flex-col gap-4">
-          {(["title", "author"] as const).map((k) => (
-            <div key={k}>
-              <label className="block text-xs font-mono font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">{k}</label>
-              <input className="w-full px-3 py-2.5 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30"
-                value={form[k]} onChange={set(k)} placeholder={k === "title" ? "e.g. Noli Me Tangere" : "e.g. José Rizal"} />
-              {errors[k] && <p className="text-xs text-red-600 mt-1">{errors[k]}</p>}
-            </div>
-          ))}
+          {(["title", "author"] as const).map((k) => {
+            const limit = k === "title" ? 120 : 80;
+            return (
+              <div key={k}>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="block text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider">{k}</label>
+                  <span className="text-xs text-muted-foreground">{form[k].length}/{limit}</span>
+                </div>
+                <input className="w-full px-3 py-2.5 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30"
+                  value={form[k]} onChange={set(k)} maxLength={limit}
+                  placeholder={k === "title" ? "e.g. Noli Me Tangere" : "e.g. José Rizal"}
+                  required />
+                {errors[k] && <p className="text-xs text-red-600 mt-1">{errors[k]}</p>}
+              </div>
+            );
+          })}
           <div>
             <label className="block text-xs font-mono font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">ISBN (10 or 13 digits)</label>
             <input className="w-full px-3 py-2.5 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30 font-mono"
-              value={form.isbn} onChange={set("isbn")} placeholder="e.g. 9789710801048" />
+              value={form.isbn} onChange={set("isbn")} placeholder="e.g. 9789710801048"
+              maxLength={13} inputMode="numeric" pattern="\d{10}|\d{13}" required />
             {errors.isbn && <p className="text-xs text-red-600 mt-1">{errors.isbn}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -59,17 +70,20 @@ export function BookModal({
             </div>
             <div>
               <label className="block text-xs font-mono font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Total Copies</label>
-              <input type="number" min={1}
-                className="w-full px-3 py-2.5 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30"
-                value={form.total} onChange={set("total")} placeholder="e.g. 4" />
-              {errors.total && <p className="text-xs text-red-600 mt-1">{errors.total}</p>}
-            </div>
+            <input type="number" min={1} step={1}
+              className="w-full px-3 py-2.5 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30"
+              value={form.total} onChange={set("total")} placeholder="e.g. 4" required />
+            {errors.total && <p className="text-xs text-red-600 mt-1">{errors.total}</p>}
+          </div>
           </div>
         </div>
+        {errorMessage ? <div className="px-5 pb-2 text-sm text-red-700">{errorMessage}</div> : null}
         <div className="flex gap-2 px-5 pb-5">
           <button onClick={onClose} className="flex-1 py-2.5 border border-border text-muted-foreground text-sm rounded-xl hover:bg-secondary transition-colors">Cancel</button>
-          <button onClick={() => { if (validate()) onSave(form); }} className="flex-1 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-xl hover:opacity-90 transition-opacity">
-            {book ? "Save Changes" : "Add Book"}
+          <button onClick={() => { if (validate()) void onSave(form); }}
+            disabled={saving}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-opacity ${saving ? "bg-primary/60 text-primary-foreground cursor-not-allowed" : "bg-primary text-primary-foreground hover:opacity-90"}`}>
+            {saving ? "Saving..." : book ? "Save Changes" : "Add Book"}
           </button>
         </div>
       </div>

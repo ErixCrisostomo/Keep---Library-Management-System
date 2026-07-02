@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from core.security import CurrentUser
 from models import models, schemas
 
 
@@ -49,10 +50,33 @@ def _get_active_or_pending_loan(db: Session, student_id: str, book_id: str):
     ).first()
 
 
+def _log(db: Session, tx_type: models.TxTypeEnum, loan: models.Loan, actor_name: str) -> None:
+    entry = models.TxLog(
+        type=tx_type,
+        book_id=loan.book_id,
+        book_title=loan.book.title,
+        author=loan.book.author,
+        student_id=loan.student_id,
+        student_name=loan.student.name,
+        student_login_id=loan.student.login_id,
+        loan_id=loan.id,
+        actor_name=actor_name,
+    )
+    db.add(entry)
+    db.commit()
+
+
+def list_logs(db: Session, student_id: str | None = None) -> list[models.TxLog]:
+    query = db.query(models.TxLog)
+    if student_id:
+        query = query.filter(models.TxLog.student_id == student_id)
+    return query.order_by(models.TxLog.created_at.asc()).all()
+
+
 # ── Librarian walk-in checkout: immediately Active, decrements stock ───────
 
-def process_checkout(db: Session, login_id: str, book_id: str) -> models.Loan:
-    student = db.query(models.User).filter(models.User.login_id == login_id).first()
+def process_checkout(db: Session, actor: CurrentUser, login_id: str, book_id: str) -> models.Loan:
+    student = db.query(models.Student).filter(models.Student.login_id == login_id).first()
     if not student:
         raise HTTPException(status_code=404, detail=f'Student "{login_id}" not found.')
     book = db.query(models.Book).filter(models.Book.id == book_id).first()
@@ -73,12 +97,13 @@ def process_checkout(db: Session, login_id: str, book_id: str) -> models.Loan:
     db.add(loan)
     db.commit()
     db.refresh(loan)
+    _log(db, models.TxTypeEnum.direct_checkout, loan, actor.name)
     return loan
 
 
 # ── Librarian direct return: immediately Returned, increments stock ────────
 
-def process_return(db: Session, loan_id: str) -> models.Loan:
+def process_return(db: Session, actor: CurrentUser, loan_id: str) -> models.Loan:
     loan = db.query(models.Loan).filter(models.Loan.id == loan_id).first()
     if not loan:
         raise HTTPException(status_code=404, detail="Loan not found.")
@@ -87,12 +112,13 @@ def process_return(db: Session, loan_id: str) -> models.Loan:
     loan.book.available = min(loan.book.available + 1, loan.book.total)
     db.commit()
     db.refresh(loan)
+    _log(db, models.TxTypeEnum.direct_return, loan, actor.name)
     return loan
 
 
 # ── Student self-service borrow request: Requested, no stock change yet ───
 
-def request_borrow(db: Session, student: models.User, book_id: str) -> models.Loan:
+def request_borrow(db: Session, student: CurrentUser, book_id: str) -> models.Loan:
     book = db.query(models.Book).filter(models.Book.id == book_id).first()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found.")
@@ -110,12 +136,13 @@ def request_borrow(db: Session, student: models.User, book_id: str) -> models.Lo
     db.add(loan)
     db.commit()
     db.refresh(loan)
+    _log(db, models.TxTypeEnum.request_borrow, loan, student.name)
     return loan
 
 
 # ── Librarian approves a borrow request: Active, decrements stock ─────────
 
-def approve_borrow(db: Session, loan_id: str) -> models.Loan:
+def approve_borrow(db: Session, actor: CurrentUser, loan_id: str) -> models.Loan:
     loan = db.query(models.Loan).filter(models.Loan.id == loan_id).first()
     if not loan:
         raise HTTPException(status_code=404, detail="Loan not found.")
@@ -127,22 +154,24 @@ def approve_borrow(db: Session, loan_id: str) -> models.Loan:
     loan.book.available -= 1
     db.commit()
     db.refresh(loan)
+    _log(db, models.TxTypeEnum.approve_borrow, loan, actor.name)
     return loan
 
 
 # ── Librarian rejects a borrow request: loan is removed ───────────────────
 
-def reject_borrow(db: Session, loan_id: str) -> None:
+def reject_borrow(db: Session, actor: CurrentUser, loan_id: str) -> None:
     loan = db.query(models.Loan).filter(models.Loan.id == loan_id).first()
     if not loan:
         raise HTTPException(status_code=404, detail="Loan not found.")
+    _log(db, models.TxTypeEnum.reject_borrow, loan, actor.name)
     db.delete(loan)
     db.commit()
 
 
 # ── Student requests a return: Return Requested, no stock change yet ──────
 
-def request_return(db: Session, student: models.User, loan_id: str) -> models.Loan:
+def request_return(db: Session, student: CurrentUser, loan_id: str) -> models.Loan:
     loan = db.query(models.Loan).filter(
         models.Loan.id == loan_id, models.Loan.student_id == student.id
     ).first()
@@ -151,12 +180,13 @@ def request_return(db: Session, student: models.User, loan_id: str) -> models.Lo
     loan.status = models.LoanStatusEnum.return_requested
     db.commit()
     db.refresh(loan)
+    _log(db, models.TxTypeEnum.request_return, loan, student.name)
     return loan
 
 
 # ── Librarian approves a return: Returned, increments stock ───────────────
 
-def approve_return(db: Session, loan_id: str) -> models.Loan:
+def approve_return(db: Session, actor: CurrentUser, loan_id: str) -> models.Loan:
     loan = db.query(models.Loan).filter(models.Loan.id == loan_id).first()
     if not loan:
         raise HTTPException(status_code=404, detail="Loan not found.")
@@ -165,6 +195,7 @@ def approve_return(db: Session, loan_id: str) -> models.Loan:
     loan.book.available = min(loan.book.available + 1, loan.book.total)
     db.commit()
     db.refresh(loan)
+    _log(db, models.TxTypeEnum.approve_return, loan, actor.name)
     return loan
 
 

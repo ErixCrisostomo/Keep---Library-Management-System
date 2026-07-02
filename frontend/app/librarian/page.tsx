@@ -1,25 +1,57 @@
 "use client";
 
 import { useState } from "react";
-import { BookOpen, ArrowLeftRight, AlertTriangle, BarChart3 } from "lucide-react";
+import { BookOpen, ArrowLeftRight, AlertTriangle, BarChart3, History, Users } from "lucide-react";
 import { useRequireRole } from "@/hooks/useAuth";
 import { useBooks } from "@/hooks/useBooks";
 import { useLoans } from "@/hooks/useLoans";
+import { useLogs } from "@/hooks/useLogs";
+import { useStudents } from "@/hooks/useStudents";
 import { formatDate } from "@/lib/utils";
 import { Header } from "@/components/Header";
 import { InventoryTab } from "@/components/InventoryTab";
 import { CheckoutTab } from "@/components/CheckoutTab";
 import { OverdueTab } from "@/components/OverdueTab";
 import { ReportsTab } from "@/components/ReportsTab";
+import { HistoryTab } from "@/components/HistoryTab";
+import { StudentsTab } from "@/components/StudentsTab";
 
-type LibTab = "inventory" | "checkout" | "overdue" | "reports";
+type LibTab = "inventory" | "checkout" | "overdue" | "students" | "history" | "reports";
 
 export default function LibrarianPage() {
   const { user, ready } = useRequireRole("librarian");
   const { books, addBook, editBook, deleteBook } = useBooks();
   const { loans, checkout, directReturn, approveBorrow, rejectBorrow, approveReturn } = useLoans();
+  const { logs, fetchLogs } = useLogs();
+  const { students } = useStudents();
   const [libTab, setLibTab] = useState<LibTab>("inventory");
   const [checkoutMode, setCheckoutMode] = useState<string>("checkout");
+
+  const handleCheckout = async (loginId: string, bookId: string) => {
+    const error = await checkout(loginId, bookId);
+    if (!error) await fetchLogs();
+    return error;
+  };
+
+  const handleDirectReturn = async (loanId: string) => {
+    await directReturn(loanId);
+    await fetchLogs();
+  };
+
+  const handleApproveBorrow = async (loanId: string) => {
+    await approveBorrow(loanId);
+    await fetchLogs();
+  };
+
+  const handleRejectBorrow = async (loanId: string) => {
+    await rejectBorrow(loanId);
+    await fetchLogs();
+  };
+
+  const handleApproveReturn = async (loanId: string) => {
+    await approveReturn(loanId);
+    await fetchLogs();
+  };
 
   if (!ready || !user) return null;
 
@@ -30,6 +62,8 @@ export default function LibrarianPage() {
     { id: "inventory", label: "Inventory Control", icon: BookOpen },
     { id: "checkout", label: "Checkout / Return", icon: ArrowLeftRight },
     { id: "overdue", label: "Overdue", icon: AlertTriangle },
+    { id: "students", label: "Students", icon: Users },
+    { id: "history", label: "History", icon: History },
     { id: "reports", label: "Reports", icon: BarChart3 },
   ];
 
@@ -55,22 +89,25 @@ export default function LibrarianPage() {
             </button>
           ))}
         </div>
-        {libTab === "inventory" && <InventoryTab books={books} onAdd={addBook} onEdit={editBook} onDelete={deleteBook} />}
+        {libTab === "inventory" && <InventoryTab books={books} loans={loans} onAdd={addBook} onEdit={editBook} onDelete={deleteBook} />}
         {libTab === "checkout" && (
           <CheckoutTab
             books={books}
             loans={loans}
-            onCheckout={checkout}
-            onReturn={directReturn}
-            onApproveBorrow={approveBorrow}
-            onRejectBorrow={rejectBorrow}
-            onApproveReturn={approveReturn}
+            students={students}
+            onCheckout={handleCheckout}
+            onReturn={handleDirectReturn}
+            onApproveBorrow={handleApproveBorrow}
+            onRejectBorrow={handleRejectBorrow}
+            onApproveReturn={handleApproveReturn}
             initialMode={checkoutMode as "checkout" | "return" | "requests" | "borrowed"}
             key={checkoutMode /* remount so initialMode takes effect on notif nav */}
           />
         )}
         {libTab === "overdue" && <OverdueTab loans={loans} />}
-        {libTab === "reports" && <ReportsTab books={books} loans={loans} />}
+        {libTab === "students" && <StudentsTab students={students} loans={loans} logs={logs} />}
+        {libTab === "history" && <HistoryTab logs={logs} />}
+        {libTab === "reports" && <ReportsTab books={books} loans={loans} logs={logs} students={students} />}
       </main>
       <footer className="border-t border-border py-4 px-4 md:px-6">
         <div className="max-w-6xl mx-auto flex items-center justify-between text-xs text-muted-foreground font-mono">

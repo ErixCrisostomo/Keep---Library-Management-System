@@ -4,16 +4,19 @@ export const GENRES_LIST = [
 ];
 export const ALL_GENRES = ["All", ...GENRES_LIST];
 
+export const PER_PAGE = 10;
+
+// Higher-contrast autumn palette — each genre gets a warm background, dark text, and a strong border.
 export const GENRE_COLORS: Record<string, string> = {
-  Fiction: "bg-amber-50 text-amber-800 border-amber-200",
-  Dystopian: "bg-stone-100 text-stone-700 border-stone-300",
-  Poetry: "bg-rose-50 text-rose-800 border-rose-200",
-  Science: "bg-sky-50 text-sky-800 border-sky-200",
-  History: "bg-yellow-50 text-yellow-800 border-yellow-200",
-  Technology: "bg-orange-50 text-orange-800 border-orange-200",
-  Philosophy: "bg-lime-50 text-lime-800 border-lime-200",
-  Economics: "bg-red-50 text-red-800 border-red-200",
-  Psychology: "bg-fuchsia-50 text-fuchsia-800 border-fuchsia-200",
+  Fiction: "bg-amber-100 text-amber-950 border-amber-500",
+  Dystopian: "bg-stone-200 text-stone-950 border-stone-600",
+  Poetry: "bg-rose-100 text-rose-950 border-rose-500",
+  Science: "bg-emerald-100 text-emerald-950 border-emerald-600",
+  History: "bg-yellow-200 text-yellow-950 border-yellow-600",
+  Technology: "bg-orange-100 text-orange-950 border-orange-500",
+  Philosophy: "bg-emerald-200 text-emerald-950 border-emerald-700",
+  Economics: "bg-red-100 text-red-950 border-red-500",
+  Psychology: "bg-orange-200 text-orange-950 border-orange-600",
 };
 
 export const EMPTY_BOOK_FORM = { title: "", author: "", isbn: "", genre: "Fiction", total: "" };

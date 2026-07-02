@@ -3,9 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from core.security import get_current_user, require_librarian
+from core.security import get_current_user, require_librarian, CurrentUser
 from database.database import get_db
-from models import models, schemas
+from models import schemas
 from services import book_service
 
 router = APIRouter(prefix="/api/books", tags=["books"])
@@ -17,7 +17,7 @@ def list_books(
     genre: Optional[str] = None,
     available_only: bool = False,
     db: Session = Depends(get_db),
-    _: models.User = Depends(get_current_user),
+    _: CurrentUser = Depends(get_current_user),
 ):
     return book_service.list_books(db, search=search, genre=genre, available_only=available_only)
 
@@ -26,7 +26,7 @@ def list_books(
 def create_book(
     payload: schemas.BookCreate,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_librarian),
+    _: CurrentUser = Depends(require_librarian),
 ):
     return book_service.create_book(db, payload)
 
@@ -36,7 +36,7 @@ def update_book(
     book_id: str,
     payload: schemas.BookUpdate,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_librarian),
+    _: CurrentUser = Depends(require_librarian),
 ):
     return book_service.update_book(db, book_id, payload)
 
@@ -45,6 +45,6 @@ def update_book(
 def delete_book(
     book_id: str,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_librarian),
+    _: CurrentUser = Depends(require_librarian),
 ):
     book_service.delete_book(db, book_id)

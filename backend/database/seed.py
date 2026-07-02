@@ -1,6 +1,6 @@
 """
-Seeds the database with demo data that mirrors the original Figma Make
-prototype, so the app behaves the same way out of the box.
+Seeds the database with demo data that mirrors the Figma Make prototype,
+so the app behaves the same way out of the box.
 
 Run with:  python -m database.seed
 """
@@ -37,16 +37,18 @@ BOOKS = [
     ("Atomic Habits", "James Clear", "9780735211292", "Psychology", 5, 4),
 ]
 
+# login_id, name, password, email, course, section, year_level
 STUDENTS = [
-    ("22-22222", "Ana Reyes", "student1"),
-    ("24-00312", "Carlo Dela Cruz", "student1"),
-    ("24-00109", "Bea Villanueva", "student1"),
-    ("24-00551", "Miguel Santos", "student1"),
-    ("24-00773", "Jessa Mercado", "student1"),
+    ("22-22222", "Ana Reyes", "student1", "anareyes@email.com", "BS Information Technology", "BSIT 2201", "2nd Year"),
+    ("24-00312", "Carlo Dela Cruz", "student1", "carlodelacruz@email.com", "BS Information Technology", "BSIT 2401", "1st Year"),
+    ("24-00109", "Bea Villanueva", "student1", "beavillanueva@email.com", "BS Computer Science", "BSCS 2401", "1st Year"),
+    ("24-00551", "Miguel Santos", "student1", "miguelsantos@email.com", "BS Information Technology", "BSIT 2402", "1st Year"),
+    ("24-00773", "Jessa Mercado", "student1", "jessamercado@email.com", "BS Computer Science", "BSCS 2402", "1st Year"),
 ]
 
-LIBRARIANS = [
-    ("juandelacruz@email.com", "Juan Dela Cruz", "lib123"),
+STAFF_ACCOUNTS = [
+    ("juandelacruz@email.com", "Juan Dela Cruz", "lib123", "librarian"),
+    ("mainadmin@email.com", "Main Admin", "admin1", "superadmin"),
 ]
 
 
@@ -65,25 +67,27 @@ def seed():
             db.add(book)
             book_rows[title] = book
 
-        user_rows: dict[str, models.User] = {}
-        for login_id, name, password in LIBRARIANS:
-            user = models.User(login_id=login_id, name=name,
-                                hashed_password=hash_password(password),
-                                role=models.RoleEnum.librarian)
-            db.add(user)
+        for login_id, name, password, role in STAFF_ACCOUNTS:
+            if role == "librarian":
+                db.add(models.Librarian(login_id=login_id, name=name,
+                                         hashed_password=hash_password(password)))
+            else:
+                db.add(models.SuperAdmin(login_id=login_id, name=name,
+                                          hashed_password=hash_password(password)))
 
-        for login_id, name, password in STUDENTS:
-            user = models.User(login_id=login_id, name=name,
-                                hashed_password=hash_password(password),
-                                role=models.RoleEnum.student)
-            db.add(user)
-            user_rows[login_id] = user
+        student_rows: dict[str, models.Student] = {}
+        for login_id, name, password, email, course, section, year_level in STUDENTS:
+            student = models.Student(login_id=login_id, name=name,
+                                      hashed_password=hash_password(password),
+                                      email=email, course=course, section=section, year_level=year_level)
+            db.add(student)
+            student_rows[login_id] = student
 
         db.flush()  # assign IDs before creating loans
 
         today = date.today()
+        # (book_title, student_login_id, borrow_offset_days, due_offset_days, status, return_offset_days)
         sample_loans = [
-            # (book_title, student_login_id, borrow_offset_days, due_offset_days, status, return_offset_days)
             ("To Kill a Mockingbird", "24-00312", -19, -5, "active", None),
             ("The Alchemist", "24-00109", -17, -3, "active", None),
             ("1984", "22-22222", -13, 1, "active", None),
@@ -92,19 +96,35 @@ def seed():
             ("Lord of the Flies", "22-22222", -32, -18, "returned", -19),
             ("Of Mice and Men", "22-22222", -52, -38, "returned", -39),
         ]
+        loan_rows = []
         for title, login_id, borrow_off, due_off, status, return_off in sample_loans:
             loan = models.Loan(
                 book_id=book_rows[title].id,
-                student_id=user_rows[login_id].id,
+                student_id=student_rows[login_id].id,
                 borrow_date=today + timedelta(days=borrow_off),
                 due_date=today + timedelta(days=due_off),
                 return_date=today + timedelta(days=return_off) if return_off is not None else None,
                 status=models.LoanStatusEnum.returned if status == "returned" else models.LoanStatusEnum.active,
             )
             db.add(loan)
+            loan_rows.append((loan, title, login_id, status))
+
+        db.flush()
+
+        # Seed matching transaction log entries so History tabs aren't empty on first run.
+        librarian_name = next((name for _, name, _, role in STAFF_ACCOUNTS if role == "librarian"), "System")
+        for loan, title, login_id, status in loan_rows:
+            student = student_rows[login_id]
+            book = book_rows[title]
+            common = dict(book_id=book.id, book_title=book.title, author=book.author,
+                          student_id=student.id, student_name=student.name,
+                          student_login_id=student.login_id, loan_id=loan.id)
+            db.add(models.TxLog(type=models.TxTypeEnum.direct_checkout, actor_name=librarian_name, **common))
+            if status == "returned":
+                db.add(models.TxLog(type=models.TxTypeEnum.direct_return, actor_name=librarian_name, **common))
 
         db.commit()
-        print(f"Seeded {len(BOOKS)} books, {len(LIBRARIANS)} librarian(s), "
+        print(f"Seeded {len(BOOKS)} books, {len(STAFF_ACCOUNTS)} staff account(s), "
               f"{len(STUDENTS)} student(s), {len(sample_loans)} loan(s).")
     finally:
         db.close()

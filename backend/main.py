@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import auth, books, loans, reports
+from api import auth, books, loans, reports, logs, staff, students
 from core.config import settings
 from database.database import Base, engine
 
@@ -22,6 +22,9 @@ app.include_router(auth.router)
 app.include_router(books.router)
 app.include_router(loans.router)
 app.include_router(reports.router)
+app.include_router(logs.router)
+app.include_router(staff.router)
+app.include_router(students.router)
 
 
 @app.get("/api/health")

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from core.security import get_current_user, require_librarian
+from core.security import get_current_user, require_librarian, CurrentUser
 from database.database import get_db
-from models import models, schemas
+from models import schemas
 from services import loan_service
 
 router = APIRouter(prefix="/api/loans", tags=["loans"])
@@ -12,10 +12,10 @@ router = APIRouter(prefix="/api/loans", tags=["loans"])
 @router.get("", response_model=list[schemas.LoanOut])
 def list_loans(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     """Librarians see all loans; students see only their own."""
-    student_id = None if current_user.role == models.RoleEnum.librarian else current_user.id
+    student_id = None if current_user.role != "student" else current_user.id
     loans = loan_service.list_loans(db, student_id=student_id)
     return [loan_service.to_loan_out(l) for l in loans]
 
@@ -26,9 +26,9 @@ def list_loans(
 def checkout(
     payload: schemas.CheckoutRequest,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_librarian),
+    actor: CurrentUser = Depends(require_librarian),
 ):
-    loan = loan_service.process_checkout(db, payload.login_id, payload.book_id)
+    loan = loan_service.process_checkout(db, actor, payload.login_id, payload.book_id)
     return loan_service.to_loan_out(loan)
 
 
@@ -36,9 +36,9 @@ def checkout(
 def direct_return(
     loan_id: str,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_librarian),
+    actor: CurrentUser = Depends(require_librarian),
 ):
-    loan = loan_service.process_return(db, loan_id)
+    loan = loan_service.process_return(db, actor, loan_id)
     return loan_service.to_loan_out(loan)
 
 
@@ -48,7 +48,7 @@ def direct_return(
 def borrow_request(
     payload: schemas.BorrowRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     loan = loan_service.request_borrow(db, current_user, payload.book_id)
     return loan_service.to_loan_out(loan)
@@ -58,7 +58,7 @@ def borrow_request(
 def request_return(
     loan_id: str,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     loan = loan_service.request_return(db, current_user, loan_id)
     return loan_service.to_loan_out(loan)
@@ -70,9 +70,9 @@ def request_return(
 def approve_borrow(
     loan_id: str,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_librarian),
+    actor: CurrentUser = Depends(require_librarian),
 ):
-    loan = loan_service.approve_borrow(db, loan_id)
+    loan = loan_service.approve_borrow(db, actor, loan_id)
     return loan_service.to_loan_out(loan)
 
 
@@ -80,16 +80,16 @@ def approve_borrow(
 def reject_borrow(
     loan_id: str,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_librarian),
+    actor: CurrentUser = Depends(require_librarian),
 ):
-    loan_service.reject_borrow(db, loan_id)
+    loan_service.reject_borrow(db, actor, loan_id)
 
 
 @router.post("/{loan_id}/approve-return", response_model=schemas.LoanOut)
 def approve_return(
     loan_id: str,
     db: Session = Depends(get_db),
-    _: models.User = Depends(require_librarian),
+    actor: CurrentUser = Depends(require_librarian),
 ):
-    loan = loan_service.approve_return(db, loan_id)
+    loan = loan_service.approve_return(db, actor, loan_id)
     return loan_service.to_loan_out(loan)

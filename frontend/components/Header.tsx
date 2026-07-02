@@ -23,15 +23,15 @@ export function Header({
         return l.student_login_id === user.login_id && l.status === "Active" && d >= 0 && d <= 3;
       }).length
     : 0;
-  const hasNotif = user.role === "librarian" ? overdueCount + pendingCount > 0 : myOverdueCount + myUpcomingCount > 0;
+  const hasNotif = user.role !== "student" ? overdueCount + pendingCount > 0 : myOverdueCount + myUpcomingCount > 0;
 
   return (
     <header className="border-b border-border bg-card sticky top-0 z-20">
       <div className="max-w-6xl mx-auto px-4 md:px-6 h-14 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 flex items-center justify-center">
+          <div className="w-7 h-7 flex items-center justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/keep-logo.png" alt="Keep logo" className="w-9 h-9 object-contain" style={{ mixBlendMode: "multiply" }} />
+            <img src="/keep-logo.png" alt="Keep logo" className="w-7 h-7 object-contain" style={{ mixBlendMode: "multiply" }} />
           </div>
           <span className="font-semibold text-lg tracking-tight font-serif">Keep</span>
           <span className="text-xs text-muted-foreground border-l border-border pl-2.5 ml-0.5 font-mono hidden sm:inline">Library Management System</span>

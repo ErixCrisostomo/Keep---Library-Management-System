@@ -1,35 +1,50 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Plus, Edit2, Trash2 } from "lucide-react";
-import { Book, BookForm } from "@/lib/types";
-import { AvailabilityBar, Toast } from "@/components/shared";
+import { Search, Plus, Edit2, Trash2, AlertTriangle } from "lucide-react";
+import { Book, BookForm, Loan } from "@/lib/types";
+import { SortOption } from "@/lib/types";
+import { sortBooks } from "@/lib/utils";
+import { ALL_GENRES, PER_PAGE } from "@/lib/constants";
+import { AvailabilityBar, GenreChip, Toast } from "@/components/shared";
 import { BookModal } from "@/components/BookModal";
+import { Pager } from "@/components/Pager";
+import { SortSelect } from "@/components/SortSelect";
 
 interface InventoryTabProps {
   books: Book[];
+  loans: Loan[];
   onAdd: (f: BookForm) => Promise<void>;
   onEdit: (id: string, f: BookForm) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
-export function InventoryTab({ books, onAdd, onEdit, onDelete }: InventoryTabProps) {
+export function InventoryTab({ books, loans, onAdd, onEdit, onDelete }: InventoryTabProps) {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "available" | "unavailable">("all");
+  const [genre, setGenre] = useState("All");
+  const [sort, setSort] = useState<SortOption>("az");
+  const [page, setPage] = useState(1);
   const [modalBook, setModalBook] = useState<Book | null | "new">(null);
   const [deleteTarget, setDeleteTarget] = useState<Book | null>(null);
+  const [blockDelete, setBlockDelete] = useState<Book | null>(null);
   const [toast, setToast] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
-  const filtered = books.filter((b) => {
+  const filtered = sortBooks(books.filter((b) => {
     const q = search.toLowerCase();
-    return (b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q) || b.isbn.includes(q))
-      && (filter === "all" || (filter === "available" ? b.available > 0 : b.available === 0));
-  });
+    const matchesSearch = b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q)
+      || b.isbn.includes(q) || b.id.toLowerCase().includes(q) || b.genre.toLowerCase().includes(q);
+    return matchesSearch && (genre === "All" || b.genre === genre);
+  }), sort);
+
+  const paged = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   const handleSave = async (form: BookForm) => {
+    setSaving(true);
+    setErrorMsg("");
     try {
       if (modalBook === "new") {
         await onAdd(form);
@@ -42,7 +57,15 @@ export function InventoryTab({ books, onAdd, onEdit, onDelete }: InventoryTabPro
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Something went wrong.");
       setTimeout(() => setErrorMsg(""), 4000);
+    } finally {
+      setSaving(false);
     }
+  };
+
+  const handleDeleteClick = (book: Book) => {
+    const hasActive = loans.some((l) => l.book_id === book.id && l.status !== "Returned");
+    if (hasActive) setBlockDelete(book);
+    else setDeleteTarget(book);
   };
 
   const handleDelete = async () => {
@@ -59,12 +82,32 @@ export function InventoryTab({ books, onAdd, onEdit, onDelete }: InventoryTabPro
 
   return (
     <>
-      {modalBook !== null && <BookModal book={modalBook === "new" ? null : modalBook} onClose={() => setModalBook(null)} onSave={handleSave} />}
+      {modalBook !== null && <BookModal book={modalBook === "new" ? null : modalBook} onClose={() => setModalBook(null)} onSave={handleSave} saving={saving} errorMessage={errorMsg} />}
+
+      {/* Popup warning — book has active loans, cannot delete */}
+      {blockDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setBlockDelete(null)}>
+          <div className="bg-card border border-amber-300 rounded-2xl w-full max-w-sm shadow-xl p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex gap-3 mb-4">
+              <AlertTriangle size={20} className="text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <h2 className="font-semibold text-foreground mb-1">Cannot Delete Book</h2>
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">&quot;{blockDelete.title}&quot;</span> has active or pending loans.
+                  All copies must be returned before this book can be removed from the catalog.
+                </p>
+              </div>
+            </div>
+            <button onClick={() => setBlockDelete(null)} className="w-full py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-xl hover:opacity-90">Understood</button>
+          </div>
+        </div>
+      )}
+
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-2xl w-full max-w-sm shadow-xl p-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-card border border-border rounded-2xl w-full max-w-sm shadow-xl p-5" onClick={(e) => e.stopPropagation()}>
             <h2 className="font-semibold mb-1">Delete Book?</h2>
-            <p className="text-sm text-muted-foreground mb-4">Remove <span className="font-medium text-foreground">&quot;{deleteTarget.title}&quot;</span> from the catalog? This cannot be undone.</p>
+            <p className="text-sm text-muted-foreground mb-4">Remove <span className="font-medium text-foreground">&quot;{deleteTarget.title}&quot;</span> permanently? This cannot be undone.</p>
             <div className="flex gap-2">
               <button onClick={() => setDeleteTarget(null)} className="flex-1 py-2.5 border border-border text-muted-foreground text-sm rounded-xl hover:bg-secondary">Cancel</button>
               <button onClick={handleDelete} className="flex-1 py-2.5 bg-destructive text-destructive-foreground text-sm font-semibold rounded-xl hover:opacity-90">Delete</button>
@@ -72,29 +115,43 @@ export function InventoryTab({ books, onAdd, onEdit, onDelete }: InventoryTabPro
           </div>
         </div>
       )}
+
       {toast && <Toast msg={toast} />}
-      <div className="flex flex-col gap-5">
+
+      <div className="flex flex-col gap-4">
         {errorMsg && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{errorMsg}</div>}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-52">
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-48">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input className="w-full pl-9 pr-4 py-2 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30"
-              placeholder="Search by title, author, or ISBN…" value={search} onChange={(e) => setSearch(e.target.value)} />
+              placeholder="Search title, author, ISBN, or book ID…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
           </div>
-          <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
-            {(["all", "available", "unavailable"] as const).map((f) => (
-              <button key={f} onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-colors ${filter === f ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-                {f}
-              </button>
-            ))}
-          </div>
+          <SortSelect value={sort} onChange={(v) => { setSort(v); setPage(1); }} />
           <button onClick={() => setModalBook("new")} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:opacity-90 transition-opacity">
             <Plus size={14} /> Add Book
           </button>
         </div>
+
+        <div className="flex gap-1.5 flex-wrap">
+          {ALL_GENRES.map((g) => (
+            <button key={g} onClick={() => { setGenre(g); setPage(1); }}
+              className={`px-2.5 py-1 text-xs rounded-full border transition-colors ${genre === g ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border hover:text-foreground"}`}>
+              {g}
+            </button>
+          ))}
+        </div>
+
         <div className="border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-24" />
+              <col className="w-auto" />
+              <col className="hidden md:table-column md:w-40" />
+              <col className="hidden md:table-column md:w-28" />
+              <col className="w-32" />
+              <col className="w-24" />
+            </colgroup>
             <thead>
               <tr className="bg-secondary border-b border-border">
                 {["ID", "Title / Author", "ISBN", "Genre", "Availability", "Actions"].map((h, i) => (
@@ -103,29 +160,33 @@ export function InventoryTab({ books, onAdd, onEdit, onDelete }: InventoryTabPro
               </tr>
             </thead>
             <tbody>
-              {filtered.map((book, i) => (
+              {paged.map((book, i) => (
                 <tr key={book.id} className={`border-b border-border last:border-0 hover:bg-muted/50 transition-colors ${i % 2 === 1 ? "bg-card/40" : ""}`}>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{book.id}</td>
-                  <td className="px-4 py-3"><div className="font-medium leading-snug">{book.title}</div><div className="text-xs text-muted-foreground mt-0.5">{book.author}</div></td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground hidden md:table-cell">{book.isbn}</td>
-                  <td className="px-4 py-3 hidden md:table-cell"><span className="text-xs px-2 py-0.5 bg-secondary rounded">{book.genre}</span></td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground truncate" title={book.id}>{book.id}</td>
+                  <td className="px-4 py-3 min-w-0">
+                    <div className="font-medium leading-snug truncate" title={book.title}>{book.title}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5 truncate" title={book.author}>{book.author}</div>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground hidden md:table-cell truncate" title={book.isbn}>{book.isbn}</td>
+                  <td className="px-4 py-3 hidden md:table-cell"><GenreChip genre={book.genre} small /></td>
                   <td className="px-4 py-3">
                     {book.available === 0
-                      ? <span className="text-xs font-mono font-medium text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded">Out of Stock</span>
+                      ? <span className="inline-flex items-center whitespace-nowrap text-xs font-serif font-medium text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg">Out of Stock</span>
                       : <AvailabilityBar available={book.available} total={book.total} />}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <button onClick={() => setModalBook(book)} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition-colors"><Edit2 size={13} /></button>
-                      <button onClick={() => setDeleteTarget(book)} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-red-50 rounded transition-colors"><Trash2 size={13} /></button>
+                      <button onClick={() => handleDeleteClick(book)} className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-red-50 rounded transition-colors"><Trash2 size={13} /></button>
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {filtered.length === 0 && <div className="text-center py-12 text-muted-foreground text-sm">No books match your search.</div>}
+          {paged.length === 0 && <div className="text-center py-12 text-muted-foreground text-sm">No books match your search.</div>}
         </div>
+        <Pager page={page} total={filtered.length} perPage={PER_PAGE} onChange={setPage} />
       </div>
     </>
   );
