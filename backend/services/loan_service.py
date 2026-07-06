@@ -1,3 +1,11 @@
+"""Loan-related business logic.
+
+This module implements core loan workflows (student requests, librarian
+approvals, direct checkout/return) and exposes helpers to list loans and
+convert Loan models into API-friendly schemas. Audit logging for loan
+events is performed via `audit_service.log_tx`.
+"""
+
 from datetime import date, timedelta
 
 from fastapi import HTTPException
@@ -6,9 +14,15 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.security import CurrentUser
 from models import models, schemas
+from services import audit_service
 
 
 def _computed_status(loan: models.Loan) -> str:
+    """Return a human-friendly loan status string.
+
+    The DB stores a compact enum but the API needs a computed "Overdue"
+    state when the due_date is in the past.
+    """
     if loan.status == models.LoanStatusEnum.returned:
         return "Returned"
     if loan.status == models.LoanStatusEnum.return_requested:
@@ -51,26 +65,57 @@ def _get_active_or_pending_loan(db: Session, student_id: str, book_id: str):
 
 
 def _log(db: Session, tx_type: models.TxTypeEnum, loan: models.Loan, actor_name: str) -> None:
-    entry = models.TxLog(
-        type=tx_type,
-        book_id=loan.book_id,
-        book_title=loan.book.title,
-        author=loan.book.author,
-        student_id=loan.student_id,
-        student_name=loan.student.name,
-        student_login_id=loan.student.login_id,
-        loan_id=loan.id,
-        actor_name=actor_name,
-    )
-    db.add(entry)
-    db.commit()
+    # Wrapper used internally to create an audit entry for loan operations.
+    # This calls the centralized audit_service and intentionally swallows
+    # errors (rolling back) so the primary operation (checkout/return/etc.)
+    # does not fail due to an auditing problem.
+    try:
+        audit_service.log_tx(db=db, tx_type=tx_type, actor_name=actor_name, loan=loan)
+    except Exception:
+        # Best-effort logging: avoid breaking main flow if audit write fails
+        db.rollback()
 
 
-def list_logs(db: Session, student_id: str | None = None) -> list[models.TxLog]:
+def list_logs(
+    db: Session,
+    student_id: str | None = None,
+    q: str | None = None,
+    types: list[str] | None = None,
+    page: int = 1,
+    per_page: int = 100,
+    sort_desc: bool = True,
+) -> list[models.TxLog]:
     query = db.query(models.TxLog)
     if student_id:
         query = query.filter(models.TxLog.student_id == student_id)
-    return query.order_by(models.TxLog.created_at.asc()).all()
+    if types:
+        # coerce to enum values
+        enum_vals = []
+        for t in types:
+            try:
+                enum_vals.append(models.TxTypeEnum(t))
+            except Exception:
+                continue
+        if enum_vals:
+            query = query.filter(models.TxLog.type.in_(enum_vals))
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            models.TxLog.book_title.ilike(like)
+            | models.TxLog.student_name.ilike(like)
+            | models.TxLog.student_login_id.ilike(like)
+            | models.TxLog.id.ilike(like)
+            | models.TxLog.author.ilike(like)
+        )
+    if sort_desc:
+        query = query.order_by(models.TxLog.created_at.desc())
+    else:
+        query = query.order_by(models.TxLog.created_at.asc())
+    # pagination
+    if page < 1:
+        page = 1
+    offset = (page - 1) * per_page
+    return query.offset(offset).limit(per_page).all()
 
 
 # ── Librarian walk-in checkout: immediately Active, decrements stock ───────
@@ -196,6 +241,21 @@ def approve_return(db: Session, actor: CurrentUser, loan_id: str) -> models.Loan
     db.commit()
     db.refresh(loan)
     _log(db, models.TxTypeEnum.approve_return, loan, actor.name)
+    return loan
+
+
+def reject_return(db: Session, actor: CurrentUser, loan_id: str) -> models.Loan:
+    """Librarian rejects a student's return request: reset to Active and keep stock unchanged."""
+    loan = db.query(models.Loan).filter(models.Loan.id == loan_id).first()
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan not found.")
+    if loan.status != models.LoanStatusEnum.return_requested:
+        raise HTTPException(status_code=400, detail="Loan is not pending return.")
+    loan.status = models.LoanStatusEnum.active
+    # return_date should remain None for active loans
+    db.commit()
+    db.refresh(loan)
+    _log(db, models.TxTypeEnum.reject_return, loan, actor.name)
     return loan
 
 

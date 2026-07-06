@@ -1,14 +1,28 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, String, Integer, Enum, ForeignKey, Date, DateTime
+from sqlalchemy import Column, String, Integer, Enum, ForeignKey, Date, DateTime, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from database.database import Base
 
 
+"""Database models for the Keep Library application.
+
+This module defines SQLAlchemy ORM models for Students, Staff, Books,
+Loans and TxLog (transaction/audit log). The TxLog table is intentionally
+denormalized so audit entries remain useful even if related rows are
+deleted later (it stores book titles, student names, etc.).
+"""
+
+
 def gen_id(prefix: str) -> str:
+    """Generate a short unique id string with the provided prefix.
+
+    Example: gen_id('U') -> 'U-1a2b3c4d'. Used across the models as a
+    human-readable primary key (students, staff, loans, txs).
+    """
     return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
@@ -25,9 +39,20 @@ class TxTypeEnum(str, enum.Enum):
     approve_borrow = "approve_borrow"
     reject_borrow = "reject_borrow"
     request_return = "request_return"
+    reject_return = "reject_return"
     approve_return = "approve_return"
     direct_checkout = "direct_checkout"
     direct_return = "direct_return"
+    # other system events
+    login = "login"
+    logout = "logout"
+    add_book = "add_book"
+    update_book = "update_book"
+    delete_book = "delete_book"
+    inventory_change = "inventory_change"
+    create_account = "create_account"
+    update_account = "update_account"
+    delete_account = "delete_account"
 
 
 class Student(Base):
@@ -126,5 +151,13 @@ class TxLog(Base):
 
     loan_id = Column(String, nullable=True)
     actor_name = Column(String, nullable=False)  # who performed the action (staff name, or the student themself)
+
+    # Optional rich metadata to help with audits and debugging
+    details = Column(JSON, nullable=True)
+    before_data = Column(JSON, nullable=True)
+    after_data = Column(JSON, nullable=True)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    source = Column(String, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, User, ChevronDown, LogOut } from "lucide-react";
+import { Bell, User, ChevronDown, LogOut, ShieldCheck } from "lucide-react";
 import { AuthUser, Loan } from "@/lib/types";
 import { useAuthStore } from "@/stores/authStore";
 import { NotificationPanel } from "@/components/NotificationPanel";
 
 export function Header({
-  user, loans, onNavigate,
-}: { user: AuthUser; loans: Loan[]; onNavigate?: (mode: string) => void }) {
+  user, loans, onNavigate, superAdminBadge,
+}: { user: AuthUser; loans: Loan[]; onNavigate?: (mode: string) => void; superAdminBadge?: boolean }) {
   const router = useRouter();
   const { logout } = useAuthStore();
   const [notifOpen, setNotifOpen] = useState(false);
@@ -35,6 +35,9 @@ export function Header({
           </div>
           <span className="font-semibold text-lg tracking-tight font-serif">Keep</span>
           <span className="text-xs text-muted-foreground border-l border-border pl-2.5 ml-0.5 font-mono hidden sm:inline">Library Management System</span>
+          {superAdminBadge && (
+            <span className="text-xs border-l border-border pl-2.5 ml-0.5 font-mono text-muted-foreground hidden sm:inline">Super Admin Console</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -51,8 +54,10 @@ export function Header({
               />
             )}
           </div>
-          <div className="flex items-center gap-2 pl-2 border-l border-border">
-            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center"><User size={13} className="text-primary" /></div>
+            <div className="flex items-center gap-2 pl-2 border-l border-border">
+            <div className={`${superAdminBadge ? "w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center" : "w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center"}`}>
+              {superAdminBadge ? <ShieldCheck size={13} className="text-amber-700" /> : <User size={13} className="text-primary" />}
+            </div>
             <div className="hidden sm:block text-xs leading-none">
               <div className="font-medium">{user.name}</div>
               <div className="text-muted-foreground mt-0.5 font-mono capitalize">{user.role}</div>

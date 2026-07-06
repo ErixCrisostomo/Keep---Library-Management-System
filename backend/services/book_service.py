@@ -5,6 +5,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from models import models, schemas
+from services import audit_service
 
 
 def _next_book_id(db: Session) -> str:
@@ -39,7 +40,7 @@ def list_books(
     return query.order_by(models.Book.title).all()
 
 
-def create_book(db: Session, payload: schemas.BookCreate) -> models.Book:
+def create_book(db: Session, payload: schemas.BookCreate, actor_name: str = "system") -> models.Book:
     existing = db.query(models.Book).filter(models.Book.isbn == payload.isbn).first()
     if existing:
         raise HTTPException(status_code=400, detail="A book with this ISBN already exists.")
@@ -51,14 +52,27 @@ def create_book(db: Session, payload: schemas.BookCreate) -> models.Book:
     db.add(book)
     db.commit()
     db.refresh(book)
+    # audit: record creation with after snapshot
+    try:
+        audit_service.log_tx(
+            db=db,
+            tx_type=models.TxTypeEnum.add_book,
+            actor_name=actor_name,
+            book=book,
+            details={"action": "create_book"},
+            after={"id": book.id, "title": book.title, "author": book.author, "isbn": book.isbn, "total": book.total, "available": book.available},
+        )
+    except Exception:
+        db.rollback()
     return book
 
 
-def update_book(db: Session, book_id: str, payload: schemas.BookUpdate) -> models.Book:
+def update_book(db: Session, book_id: str, payload: schemas.BookUpdate, actor_name: str = "system") -> models.Book:
     book = db.query(models.Book).filter(models.Book.id == book_id).first()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found.")
     # Adjust available copies by the same delta as total, floored at 0
+    before = {"id": book.id, "title": book.title, "author": book.author, "isbn": book.isbn, "genre": book.genre, "total": book.total, "available": book.available}
     delta = payload.total - book.total
     book.title = payload.title
     book.author = payload.author
@@ -68,10 +82,23 @@ def update_book(db: Session, book_id: str, payload: schemas.BookUpdate) -> model
     book.available = max(0, book.available + delta)
     db.commit()
     db.refresh(book)
+    after = {"id": book.id, "title": book.title, "author": book.author, "isbn": book.isbn, "genre": book.genre, "total": book.total, "available": book.available}
+    try:
+        audit_service.log_tx(
+            db=db,
+            tx_type=models.TxTypeEnum.update_book,
+            actor_name=actor_name,
+            book=book,
+            details={"action": "update_book"},
+            before=before,
+            after=after,
+        )
+    except Exception:
+        db.rollback()
     return book
 
 
-def delete_book(db: Session, book_id: str) -> None:
+def delete_book(db: Session, book_id: str, actor_name: str = "system") -> None:
     book = db.query(models.Book).filter(models.Book.id == book_id).first()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found.")
@@ -81,5 +108,16 @@ def delete_book(db: Session, book_id: str) -> None:
     ).count()
     if active_loans > 0:
         raise HTTPException(status_code=400, detail="Cannot delete a book with active loans.")
+    before = {"id": book.id, "title": book.title, "author": book.author, "isbn": book.isbn, "genre": book.genre, "total": book.total, "available": book.available}
     db.delete(book)
     db.commit()
+    try:
+        audit_service.log_tx(
+            db=db,
+            tx_type=models.TxTypeEnum.delete_book,
+            actor_name=actor_name,
+            details={"action": "delete_book"},
+            before=before,
+        )
+    except Exception:
+        db.rollback()

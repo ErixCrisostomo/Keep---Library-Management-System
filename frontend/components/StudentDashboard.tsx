@@ -27,6 +27,10 @@ export function StudentDashboard({ user, books, loans, logs, onBorrow, onRequest
   const [returnModal, setReturnModal] = useState<Loan | null>(null);
   const [toast, setToast] = useState("");
   const [loanPage, setLoanPage] = useState(1);
+  const [loanQ, setLoanQ] = useState("");
+  const [loanSort, setLoanSort] = useState<"due-soon" | "due-late" | "borrowed-new" | "borrowed-old">("due-soon");
+  // checkboxes act as explicit inclusion; default none checked so Active loans show by default
+  const [loanFilters, setLoanFilters] = useState({ overdue: true, returnRequested: true, requested: true, active: true });
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
@@ -44,9 +48,46 @@ export function StudentDashboard({ user, books, loans, logs, onBorrow, onRequest
   });
 
   const studentLogs = logs.filter((log) => log.student_login_id === user.login_id);
-  const loanTotalPages = Math.max(1, Math.ceil(myActiveLoans.length / PER_PAGE));
+  // Apply student-side filters, search and sort for active loans
+  const matchesLoanQuery = (l: Loan) => {
+    const q = loanQ.trim().toLowerCase();
+    if (!q) return true;
+    if ((l.book_title || "").toLowerCase().includes(q)) return true;
+    if ((l.author || "").toLowerCase().includes(q)) return true;
+    if ((l.id || "").toLowerCase().includes(q)) return true;
+    if ((l.student_login_id || "").toLowerCase().includes(q)) return true;
+    if (formatISODate(l.due_date).toLowerCase().includes(q)) return true;
+    if (formatISODate(l.borrow_date).toLowerCase().includes(q)) return true;
+    return false;
+  };
+
+  // If any checkbox is checked, show only loans matching checked statuses.
+  // Otherwise (no checkbox checked) default to showing Active loans.
+  const LOAN_CATEGORY_MAP: Record<string, string[]> = {
+    overdue: ["Overdue"],
+    returnRequested: ["Return Requested"],
+    requested: ["Requested"],
+    active: ["Active"],
+  };
+
+  const selectedLoanKeys = Object.entries(loanFilters).filter(([, v]) => v).map(([k]) => k);
+  const selectedLoanStatuses = Array.from(new Set(selectedLoanKeys.flatMap((k) => LOAN_CATEGORY_MAP[k] ?? [])));
+
+  const filteredActiveLoans = myActiveLoans.filter((l) => {
+    if (selectedLoanStatuses.length === 0) return false;
+    return selectedLoanStatuses.includes(l.status);
+  }).filter(matchesLoanQuery);
+
+  const sortedActiveLoans = [...filteredActiveLoans].sort((a, b) => {
+    if (loanSort === "due-soon") return daysUntilDue(a.due_date) - daysUntilDue(b.due_date);
+    if (loanSort === "due-late") return daysUntilDue(b.due_date) - daysUntilDue(a.due_date);
+    if (loanSort === "borrowed-new") return new Date(b.borrow_date).getTime() - new Date(a.borrow_date).getTime();
+    return new Date(a.borrow_date).getTime() - new Date(b.borrow_date).getTime();
+  });
+
+  const loanTotalPages = Math.max(1, Math.ceil(sortedActiveLoans.length / PER_PAGE));
   const currentLoanPage = Math.min(loanPage, loanTotalPages);
-  const pagedActiveLoans = myActiveLoans.slice((currentLoanPage - 1) * PER_PAGE, currentLoanPage * PER_PAGE);
+  const pagedActiveLoans = sortedActiveLoans.slice((currentLoanPage - 1) * PER_PAGE, currentLoanPage * PER_PAGE);
 
   useEffect(() => {
     if (loanPage > loanTotalPages) setLoanPage(loanTotalPages);
@@ -102,8 +143,47 @@ export function StudentDashboard({ user, books, loans, logs, onBorrow, onRequest
             ? <div className="text-center py-14 text-muted-foreground text-sm border border-dashed border-border rounded-xl">You have no active loans.</div>
             : (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {pagedActiveLoans.map((loan) => {
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-2 bg-card border border-border rounded-lg">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <input
+                      value={loanQ}
+                      onChange={(e) => { setLoanQ(e.target.value); setLoanPage(1); }}
+                      placeholder="Search title, author, date, loan id..."
+                      className="w-full md:w-72 px-3 py-2.5 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30 text-foreground"
+                    />
+                    <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${loanFilters.active ? "border-amber-200 bg-amber-50" : "border-border bg-transparent"}`}>
+                      <input type="checkbox" checked={loanFilters.active} onChange={(e) => { setLoanFilters((s) => ({ ...s, active: e.target.checked })); setLoanPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background" />
+                      <span className="select-none">Active</span>
+                    </label>
+                    <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${loanFilters.overdue ? "border-amber-200 bg-amber-50" : "border-border bg-transparent"}`}>
+                      <input type="checkbox" checked={loanFilters.overdue} onChange={(e) => { setLoanFilters((s) => ({ ...s, overdue: e.target.checked })); setLoanPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background" />
+                      <span className="select-none">Overdue</span>
+                    </label>
+                    <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${loanFilters.returnRequested ? "border-amber-200 bg-amber-50" : "border-border bg-transparent"}`}>
+                      <input type="checkbox" checked={loanFilters.returnRequested} onChange={(e) => { setLoanFilters((s) => ({ ...s, returnRequested: e.target.checked })); setLoanPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background" />
+                      <span className="select-none">Return Requested</span>
+                    </label>
+                    <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${loanFilters.requested ? "border-amber-200 bg-amber-50" : "border-border bg-transparent"}`}>
+                      <input type="checkbox" checked={loanFilters.requested} onChange={(e) => { setLoanFilters((s) => ({ ...s, requested: e.target.checked })); setLoanPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background" />
+                      <span className="select-none">Requested</span>
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-muted-foreground">Sort:</label>
+                    <select value={loanSort} onChange={(e) => { setLoanSort(e.target.value as any); setLoanPage(1); }} className="text-xs px-2.5 py-1.5 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30 text-foreground">
+                      <option value="due-soon">Due (Soonest)</option>
+                      <option value="due-late">Due (Latest)</option>
+                      <option value="borrowed-new">Borrowed (Newest)</option>
+                      <option value="borrowed-old">Borrowed (Oldest)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {sortedActiveLoans.length === 0 ? (
+                  <div className="text-center py-14 text-muted-foreground text-sm border border-dashed border-border rounded-xl">No loans match your filters.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {pagedActiveLoans.map((loan) => {
                     const isOverdue = loan.status === "Overdue";
                     const isRequested = loan.status === "Requested";
                     const isReturnRequested = loan.status === "Return Requested";
@@ -137,8 +217,11 @@ export function StudentDashboard({ user, books, loans, logs, onBorrow, onRequest
                       </div>
                     );
                   })}
-                </div>
-                <Pager page={currentLoanPage} total={myActiveLoans.length} perPage={PER_PAGE} onChange={setLoanPage} />
+                  </div>
+                )}
+                {sortedActiveLoans.length > 0 && (
+                  <Pager page={currentLoanPage} total={sortedActiveLoans.length} perPage={PER_PAGE} onChange={setLoanPage} />
+                )}
               </>
             )
         )}

@@ -11,4 +11,5 @@ export const authService = {
   login: (login_id: string, password: string) =>
     api.post<TokenResponse>("/api/auth/login", { login_id, password }),
   me: () => api.get<AuthUser>("/api/auth/me"),
+  logout: () => api.post<void>("/api/auth/logout"),
 };

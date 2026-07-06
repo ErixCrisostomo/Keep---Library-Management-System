@@ -17,6 +17,7 @@ export const loanService = {
   approveBorrow: (loanId: string) => api.post<Loan>(`/api/loans/${loanId}/approve-borrow`),
   rejectBorrow: (loanId: string) => api.post<void>(`/api/loans/${loanId}/reject-borrow`),
   approveReturn: (loanId: string) => api.post<Loan>(`/api/loans/${loanId}/approve-return`),
+  rejectReturn: (loanId: string) => api.post<Loan>(`/api/loans/${loanId}/reject-return`),
 
   reportSummary: () => api.get<ReportSummary>("/api/reports/summary"),
 };

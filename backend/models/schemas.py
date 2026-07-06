@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, Field
 
 Role = Literal["librarian", "student", "superadmin"]
 LoanStatus = Literal["Requested", "Active", "Overdue", "Return Requested", "Returned"]
@@ -10,8 +10,10 @@ LoanStatus = Literal["Requested", "Active", "Overdue", "Return Requested", "Retu
 # ── Auth ──────────────────────────────────────────────────────────────────
 
 class LoginRequest(BaseModel):
-    login_id: str  # email for librarians, SR code for students
-    password: str
+    # login_id: email for librarians, SR code for students
+    login_id: str = Field(..., max_length=64)
+    # password length limit
+    password: str = Field(..., min_length=1, max_length=128)
 
 
 class UserOut(BaseModel):
@@ -95,7 +97,9 @@ class ReportSummary(BaseModel):
 
 TxType = Literal[
     "request_borrow", "approve_borrow", "reject_borrow",
-    "request_return", "approve_return", "direct_checkout", "direct_return",
+    "request_return", "approve_return", "reject_return", "direct_checkout", "direct_return",
+    "login", "logout", "add_book", "update_book", "delete_book", "inventory_change",
+    "create_account", "update_account", "delete_account",
 ]
 
 
@@ -111,6 +115,12 @@ class TxLogOut(BaseModel):
     student_login_id: str
     loan_id: Optional[str] = None
     actor_name: str
+    details: Optional[dict] = None
+    before_data: Optional[dict] = None
+    after_data: Optional[dict] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    source: Optional[str] = None
     created_at: datetime
 
     @field_validator("type", mode="before")

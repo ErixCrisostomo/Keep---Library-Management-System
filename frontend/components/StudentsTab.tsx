@@ -16,6 +16,7 @@ const TX_LABELS: Record<TxType, string> = {
   approve_return: "Return Confirmed",
   direct_checkout: "Direct Checkout",
   direct_return: "Direct Return",
+  reject_return: "Return Rejected",
 };
 
 const TX_COLORS: Record<TxType, { bg: string; border: string; icon: ElementType; iconColor: string }> = {
@@ -24,6 +25,7 @@ const TX_COLORS: Record<TxType, { bg: string; border: string; icon: ElementType;
   reject_borrow: { bg: "bg-red-50", border: "border-red-200", icon: ThumbsDown, iconColor: "text-red-600" },
   request_return: { bg: "bg-violet-50", border: "border-violet-200", icon: RefreshCw, iconColor: "text-violet-600" },
   approve_return: { bg: "bg-teal-50", border: "border-teal-200", icon: CheckCircle2, iconColor: "text-teal-600" },
+  reject_return: { bg: "bg-red-50", border: "border-red-200", icon: ThumbsDown, iconColor: "text-red-600" },
   direct_checkout: { bg: "bg-amber-50", border: "border-amber-200", icon: ArrowLeftRight, iconColor: "text-amber-700" },
   direct_return: { bg: "bg-stone-50", border: "border-stone-300", icon: CheckCircle2, iconColor: "text-stone-600" },
 };

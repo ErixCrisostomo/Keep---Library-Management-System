@@ -11,17 +11,18 @@ import { formatDate } from "@/lib/utils";
 import { Header } from "@/components/Header";
 import { InventoryTab } from "@/components/InventoryTab";
 import { CheckoutTab } from "@/components/CheckoutTab";
+import { BorrowedTab } from "@/components/BorrowedTab";
 import { OverdueTab } from "@/components/OverdueTab";
 import { ReportsTab } from "@/components/ReportsTab";
 import { HistoryTab } from "@/components/HistoryTab";
 import { StudentsTab } from "@/components/StudentsTab";
 
-type LibTab = "inventory" | "checkout" | "overdue" | "students" | "history" | "reports";
+type LibTab = "inventory" | "checkout" | "borrowed" | "overdue" | "students" | "history" | "reports";
 
 export default function LibrarianPage() {
   const { user, ready } = useRequireRole("librarian");
   const { books, addBook, editBook, deleteBook } = useBooks();
-  const { loans, checkout, directReturn, approveBorrow, rejectBorrow, approveReturn } = useLoans();
+  const { loans, checkout, directReturn, approveBorrow, rejectBorrow, approveReturn, rejectReturn } = useLoans();
   const { logs, fetchLogs } = useLogs();
   const { students } = useStudents();
   const [libTab, setLibTab] = useState<LibTab>("inventory");
@@ -53,6 +54,11 @@ export default function LibrarianPage() {
     await fetchLogs();
   };
 
+  const handleRejectReturn = async (loanId: string) => {
+    await rejectReturn(loanId);
+    await fetchLogs();
+  };
+
   if (!ready || !user) return null;
 
   const overdueCount = loans.filter((l) => l.status === "Overdue").length;
@@ -61,6 +67,7 @@ export default function LibrarianPage() {
   const libTabs: { id: LibTab; label: string; icon: React.ElementType }[] = [
     { id: "inventory", label: "Inventory Control", icon: BookOpen },
     { id: "checkout", label: "Checkout / Return", icon: ArrowLeftRight },
+    { id: "borrowed", label: "Borrowed Items", icon: BookOpen },
     { id: "overdue", label: "Overdue", icon: AlertTriangle },
     { id: "students", label: "Students", icon: Users },
     { id: "history", label: "History", icon: History },
@@ -99,11 +106,13 @@ export default function LibrarianPage() {
             onReturn={handleDirectReturn}
             onApproveBorrow={handleApproveBorrow}
             onRejectBorrow={handleRejectBorrow}
-            onApproveReturn={handleApproveReturn}
+              onApproveReturn={handleApproveReturn}
+              onRejectReturn={handleRejectReturn}
             initialMode={checkoutMode as "checkout" | "return" | "requests" | "borrowed"}
             key={checkoutMode /* remount so initialMode takes effect on notif nav */}
           />
         )}
+        {libTab === "borrowed" && <BorrowedTab books={books} loans={loans} />}
         {libTab === "overdue" && <OverdueTab loans={loans} />}
         {libTab === "students" && <StudentsTab students={students} loans={loans} logs={logs} />}
         {libTab === "history" && <HistoryTab logs={logs} />}

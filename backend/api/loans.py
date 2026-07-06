@@ -93,3 +93,13 @@ def approve_return(
 ):
     loan = loan_service.approve_return(db, actor, loan_id)
     return loan_service.to_loan_out(loan)
+
+
+@router.post("/{loan_id}/reject-return", response_model=schemas.LoanOut)
+def reject_return(
+    loan_id: str,
+    db: Session = Depends(get_db),
+    actor: CurrentUser = Depends(require_librarian),
+):
+    loan = loan_service.reject_return(db, actor, loan_id)
+    return loan_service.to_loan_out(loan)

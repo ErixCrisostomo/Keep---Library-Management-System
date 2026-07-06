@@ -4,6 +4,7 @@ export type SortOption = "az" | "za" | "avail-desc" | "avail-asc" | "available-o
 export type TxType =
   | "request_borrow" | "approve_borrow" | "reject_borrow"
   | "request_return" | "approve_return" | "direct_checkout" | "direct_return";
+  | "reject_return";
 
 export interface AuthUser {
   id: string;

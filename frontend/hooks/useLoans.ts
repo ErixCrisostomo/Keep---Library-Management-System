@@ -6,7 +6,7 @@ import { useLoanStore } from "@/stores/loanStore";
 export function useLoans() {
   const {
     loans, isLoading, error, fetchLoans,
-    checkout, directReturn, approveBorrow, rejectBorrow, approveReturn,
+    checkout, directReturn, approveBorrow, rejectBorrow, approveReturn, rejectReturn,
     requestBorrow, requestReturn,
   } = useLoanStore();
 
@@ -17,7 +17,7 @@ export function useLoans() {
 
   return {
     loans, isLoading, error, fetchLoans,
-    checkout, directReturn, approveBorrow, rejectBorrow, approveReturn,
+    checkout, directReturn, approveBorrow, rejectBorrow, approveReturn, rejectReturn,
     requestBorrow, requestReturn,
   };
 }

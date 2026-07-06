@@ -9,7 +9,7 @@ import { GenreChip, StatusBadge, Toast } from "@/components/shared";
 import { Pager } from "@/components/Pager";
 import { SortSelect } from "@/components/SortSelect";
 
-type CheckoutMode = "checkout" | "return" | "requests" | "borrowed";
+type CheckoutMode = "checkout" | "return" | "requests";
 type RequestFilter = "all" | "borrow" | "return";
 type RequestSort = "newest" | "oldest" | "student" | "book";
 
@@ -22,6 +22,7 @@ interface CheckoutTabProps {
   onApproveBorrow: (loanId: string) => Promise<void>;
   onRejectBorrow: (loanId: string) => Promise<void>;
   onApproveReturn: (loanId: string) => Promise<void>;
+  onRejectReturn?: (loanId: string) => Promise<void>;
   initialMode?: CheckoutMode;
 }
 
@@ -53,13 +54,16 @@ function SuggestionList<T>({
 }
 
 export function CheckoutTab({
-  books, loans, students, onCheckout, onReturn, onApproveBorrow, onRejectBorrow, onApproveReturn, initialMode,
+  books, loans, students, onCheckout, onReturn, onApproveBorrow, onRejectBorrow, onApproveReturn, onRejectReturn, initialMode,
 }: CheckoutTabProps) {
   const [mode, setMode] = useState<CheckoutMode>(initialMode ?? "checkout");
   const [loginId, setLoginId] = useState("");
   const [bookId, setBookId] = useState("");
   const [lookupId, setLookupId] = useState("");
   const [lookedUp, setLookedUp] = useState(false);
+  const [studentSuggestOpen, setStudentSuggestOpen] = useState(false);
+  const [bookSuggestOpen, setBookSuggestOpen] = useState(false);
+  const [lookupSuggestOpen, setLookupSuggestOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [toast, setToast] = useState("");
@@ -145,7 +149,6 @@ export function CheckoutTab({
     { id: "checkout", label: "Checkout" },
     { id: "return", label: "Return" },
     { id: "requests", label: `Requests${requestLoans.length > 0 ? ` (${requestLoans.length})` : ""}` },
-    { id: "borrowed", label: `Borrowed (${borrowedLoans.length})` },
   ];
 
   return (
@@ -169,32 +172,40 @@ export function CheckoutTab({
             <div className="relative">
               <label className="block text-xs font-mono font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Student Number</label>
               <input className="w-full px-3 py-2.5 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30 font-mono"
-                placeholder="Type a student name or number" value={loginId} onChange={(e) => setLoginId(e.target.value)} />
-              <SuggestionList
-                items={studentSuggestions}
-                onPick={(s) => setLoginId(s.login_id)}
-                render={(s) => (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium">{s.name}</span>
-                    <span className="font-mono text-xs text-muted-foreground">{s.login_id}</span>
-                  </div>
-                )}
-              />
+                placeholder="Type a student name or number" value={loginId}
+                onChange={(e) => { setLoginId(e.target.value); setStudentSuggestOpen(e.target.value.trim().length >= 2); }}
+                onFocus={() => setStudentSuggestOpen(loginId.trim().length >= 2)} />
+              {studentSuggestOpen && studentSuggestions.length > 0 && (
+                <SuggestionList
+                  items={studentSuggestions}
+                  onPick={(s) => { setLoginId(s.login_id); setStudentSuggestOpen(false); }}
+                  render={(s) => (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium">{s.name}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{s.login_id}</span>
+                    </div>
+                  )}
+                />
+              )}
             </div>
             <div className="relative">
               <label className="block text-xs font-mono font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Book ID</label>
               <input className="w-full px-3 py-2.5 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30 font-mono"
-                placeholder="Type a book title or ID" value={bookId} onChange={(e) => setBookId(e.target.value)} />
-              <SuggestionList
-                items={bookSuggestions}
-                onPick={(b) => setBookId(b.id)}
-                render={(b) => (
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium truncate">{b.title}</span>
-                    <span className="font-mono text-xs text-muted-foreground shrink-0">{b.id}</span>
-                  </div>
-                )}
-              />
+                placeholder="Type a book title or ID" value={bookId}
+                onChange={(e) => { setBookId(e.target.value); setBookSuggestOpen(e.target.value.trim().length >= 1); }}
+                onFocus={() => setBookSuggestOpen(bookId.trim().length >= 1)} />
+              {bookSuggestOpen && bookSuggestions.length > 0 && (
+                <SuggestionList
+                  items={bookSuggestions}
+                  onPick={(b) => { setBookId(b.id); setBookSuggestOpen(false); }}
+                  render={(b) => (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium truncate">{b.title}</span>
+                      <span className="font-mono text-xs text-muted-foreground shrink-0">{b.id}</span>
+                    </div>
+                  )}
+                />
+              )}
             </div>
             {errorMsg && <div className="flex gap-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"><XCircle size={15} className="shrink-0 mt-0.5" />{errorMsg}</div>}
             {successMsg && <div className="flex gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700"><CheckCircle2 size={15} className="shrink-0 mt-0.5" />{successMsg}</div>}
@@ -213,19 +224,22 @@ export function CheckoutTab({
                   <div className="flex gap-2">
                     <input className="flex-1 px-3 py-2.5 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30 font-mono"
                       placeholder="Start typing a student or book" value={lookupId}
-                      onChange={(e) => { setLookupId(e.target.value); setLookedUp(false); setSuccessMsg(""); }} />
+                      onChange={(e) => { setLookupId(e.target.value); setLookedUp(false); setSuccessMsg(""); setLookupSuggestOpen(e.target.value.trim().length >= 1); }}
+                      onFocus={() => setLookupSuggestOpen(lookupId.trim().length >= 1)} />
                     <button onClick={() => { setLookedUp(true); setSuccessMsg(""); }} className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:opacity-90 transition-opacity">Lookup</button>
                   </div>
-                  <SuggestionList
-                    items={lookupSuggestions}
-                    onPick={(loan) => { setLookupId(loan.id); setLookedUp(true); }}
-                    render={(loan) => (
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="truncate">{loan.book_title} - {loan.student_name}</span>
-                        <span className="font-mono text-xs text-muted-foreground shrink-0">{loan.id}</span>
-                      </div>
-                    )}
-                  />
+                  {lookupSuggestOpen && lookupSuggestions.length > 0 && (
+                    <SuggestionList
+                      items={lookupSuggestions}
+                      onPick={(loan) => { setLookupId(loan.id); setLookedUp(true); setLookupSuggestOpen(false); }}
+                      render={(loan) => (
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate">{loan.book_title} - {loan.student_name}</span>
+                          <span className="font-mono text-xs text-muted-foreground shrink-0">{loan.id}</span>
+                        </div>
+                      )}
+                    />
+                  )}
                 </div>
               </div>
               {successMsg && <div className="flex gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700"><CheckCircle2 size={15} className="shrink-0 mt-0.5" />{successMsg}</div>}
@@ -260,10 +274,18 @@ export function CheckoutTab({
                           <div className="text-xs text-muted-foreground mt-0.5 truncate">{loan.student_name} · <span className="font-mono">{loan.student_login_id}</span></div>
                           <div className="text-xs text-muted-foreground font-mono mt-1">Requested on {formatISODate(loan.borrow_date)}</div>
                         </div>
-                        <button onClick={() => { void onApproveReturn(loan.id); showToast(`"${loan.book_title}" return approved.`); }}
-                          className="shrink-0 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity">
-                          Approve
-                        </button>
+                        <div className="flex gap-2">
+                          {onRejectReturn && (
+                            <button onClick={() => { void onRejectReturn(loan.id); showToast(`"${loan.book_title}" return rejected.`); }}
+                              className="shrink-0 px-3 py-1.5 text-xs font-medium border border-border text-muted-foreground rounded-lg hover:bg-secondary transition-colors">
+                              Reject
+                            </button>
+                          )}
+                          <button onClick={() => { void onApproveReturn(loan.id); showToast(`"${loan.book_title}" return approved.`); }}
+                            className="shrink-0 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity">
+                            Approve
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -329,10 +351,18 @@ export function CheckoutTab({
                           </button>
                         </div>
                       ) : (
-                        <button onClick={() => { void onApproveReturn(loan.id); showToast(`"${loan.book_title}" return approved.`); }}
-                          className="w-full flex items-center justify-center gap-1.5 py-1 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity">
-                          <ThumbsUp size={12} /> Approve Return
-                        </button>
+                        <div className="flex gap-2">
+                          {onRejectReturn && (
+                            <button onClick={() => { void onRejectReturn(loan.id); showToast(`"${loan.book_title}" return rejected.`); }}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-1 text-xs font-medium border border-border text-muted-foreground rounded-lg hover:bg-secondary transition-colors">
+                              <ThumbsDown size={12} /> Reject
+                            </button>
+                          )}
+                          <button onClick={() => { void onApproveReturn(loan.id); showToast(`"${loan.book_title}" return approved.`); }}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-1 text-xs font-medium bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity">
+                            <ThumbsUp size={12} /> Approve Return
+                          </button>
+                        </div>
                       )}
                     </div>
                   );
@@ -343,63 +373,7 @@ export function CheckoutTab({
           </div>
         )}
 
-        {mode === "borrowed" && (
-          <div className="flex flex-col gap-4">
-            <div className="flex gap-2 items-center flex-wrap">
-              <div className="relative flex-1 min-w-48">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  className="w-full pl-9 pr-4 py-2 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30"
-                  placeholder="Search by book title, author, student name, or student number"
-                  value={borrowedSearch} onChange={(e) => { setBorrowedSearch(e.target.value); setBorrowedPage(1); }} />
-              </div>
-              <SortSelect value={borrowedSort} onChange={(v) => { setBorrowedSort(v); setBorrowedPage(1); }} />
-            </div>
-            <div className="text-xs text-muted-foreground font-mono">
-              {filteredBorrowed.length} of {borrowedLoans.length} active loan{borrowedLoans.length !== 1 ? "s" : ""}
-            </div>
-            <div className="border border-border rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-secondary border-b border-border">
-                    {["Book", "Genre", "Student", "SR Code", "Borrowed", "Due Date", "Status"].map((h, i) => (
-                      <th key={h} className={`text-left px-2 py-2 text-xs font-mono font-medium text-muted-foreground uppercase tracking-wider ${i === 1 || i === 4 ? "hidden md:table-cell" : ""}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedBorrowed.map((loan, i) => {
-                    const book = books.find((b) => b.id === loan.book_id);
-                    return (
-                      <tr key={loan.id} className={`border-b border-border last:border-0 transition-colors hover:bg-muted/40 ${i % 2 === 1 ? "bg-card/40" : ""}`}>
-                        <td className="px-2 py-2">
-                          <div className="font-medium leading-snug truncate">{loan.book_title}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5 truncate">{loan.author}</div>
-                          <div className="text-[10px] text-muted-foreground mt-1">Book ID: <span className="font-mono">{loan.book_id}</span></div>
-                        </td>
-                        <td className="px-2 py-1.5 hidden md:table-cell">{book && <GenreChip genre={book.genre} small />}</td>
-                        <td className="px-2 py-1.5"><div className="font-medium truncate">{loan.student_name}</div></td>
-                        <td className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground">{loan.student_login_id}</td>
-                        <td className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground hidden md:table-cell">{formatDateTime(loan.borrow_date)}</td>
-                        <td className="px-2 py-1.5 font-mono text-[10px]">
-                          <span className={loan.status === "Overdue" ? "text-red-700 font-semibold" : "text-muted-foreground"}>{formatISODate(loan.due_date)}</span>
-                          {loan.status === "Overdue" && <div className="text-[10px] text-red-500 mt-0.5">+{daysOverdue(loan.due_date)} days</div>}
-                        </td>
-                        <td className="px-2 py-1.5"><StatusBadge status={loan.status} /></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {pagedBorrowed.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  {borrowedLoans.length === 0 ? "No books are currently borrowed." : "No loans match your search."}
-                </div>
-              )}
-            </div>
-            <Pager page={borrowedPage} total={filteredBorrowed.length} perPage={PER_PAGE} onChange={setBorrowedPage} />
-          </div>
-        )}
+        {/* Borrowed tab moved to a top-level Librarian tab; retained here only: checkout/return/requests */}
       </div>
     </>
   );

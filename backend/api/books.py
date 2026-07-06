@@ -26,9 +26,9 @@ def list_books(
 def create_book(
     payload: schemas.BookCreate,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_librarian),
+    current_user: CurrentUser = Depends(require_librarian),
 ):
-    return book_service.create_book(db, payload)
+    return book_service.create_book(db, payload, actor_name=current_user.name)
 
 
 @router.put("/{book_id}", response_model=schemas.BookOut)
@@ -36,15 +36,15 @@ def update_book(
     book_id: str,
     payload: schemas.BookUpdate,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_librarian),
+    current_user: CurrentUser = Depends(require_librarian),
 ):
-    return book_service.update_book(db, book_id, payload)
+    return book_service.update_book(db, book_id, payload, actor_name=current_user.name)
 
 
 @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_book(
     book_id: str,
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_librarian),
+    current_user: CurrentUser = Depends(require_librarian),
 ):
-    book_service.delete_book(db, book_id)
+    book_service.delete_book(db, book_id, actor_name=current_user.name)

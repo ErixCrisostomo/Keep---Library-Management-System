@@ -49,18 +49,27 @@ export function LoginScreen() {
               <input autoFocus
                 className="w-full px-3 py-2.5 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30"
                 placeholder="juandelacruz@email.com or 22-22222"
-                value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
+                value={identifier}
+                maxLength={64}
+                onChange={(e) => setIdentifier(e.target.value)} />
             </div>
             <div>
               <label className="block text-xs font-mono font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Password</label>
               <div className="relative">
                 <input type={showPw ? "text" : "password"}
                   className="w-full px-3 py-2.5 pr-10 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30"
-                  placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                  placeholder="Enter your password"
+                  value={password}
+                  maxLength={128}
+                  onChange={(e) => setPassword(e.target.value)} />
                 <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowPw((v) => !v)}>
                   {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
+            </div>
+            <div className="flex justify-between text-[11px] text-muted-foreground">
+              <div>Identifier max 64 chars</div>
+              <div>Password max 128 chars</div>
             </div>
             {error && <div className="flex gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700"><XCircle size={13} className="shrink-0 mt-0.5" />{error}</div>}
             <button type="submit" disabled={isLoading}

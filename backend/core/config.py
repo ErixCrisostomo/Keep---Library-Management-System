@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # App
     LOAN_PERIOD_DAYS: int = 14
-    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

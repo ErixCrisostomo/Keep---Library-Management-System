@@ -15,6 +15,7 @@ interface LoanState {
   approveBorrow: (loanId: string) => Promise<void>;
   rejectBorrow: (loanId: string) => Promise<void>;
   approveReturn: (loanId: string) => Promise<void>;
+  rejectReturn: (loanId: string) => Promise<void>;
 
   // Student actions
   requestBorrow: (bookId: string) => Promise<string | null>;
@@ -73,6 +74,11 @@ export const useLoanStore = create<LoanState>((set, get) => ({
     const loan = await loanService.approveReturn(loanId);
     set({ loans: get().loans.map((l) => (l.id === loanId ? loan : l)) });
     await refreshBooks();
+  },
+
+  rejectReturn: async (loanId) => {
+    const loan = await loanService.rejectReturn(loanId);
+    set({ loans: get().loans.map((l) => (l.id === loanId ? loan : l)) });
   },
 
   requestBorrow: async (bookId) => {
