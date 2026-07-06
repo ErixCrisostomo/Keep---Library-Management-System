@@ -82,7 +82,7 @@ def list_logs(
     q: str | None = None,
     types: list[str] | None = None,
     page: int = 1,
-    per_page: int = 100,
+    per_page: int = 1000,
     sort_desc: bool = True,
 ) -> list[models.TxLog]:
     query = db.query(models.TxLog)

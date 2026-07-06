@@ -132,7 +132,7 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
                 <svg className="size-4" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><path d="M12 9v4" strokeLinecap="round" strokeLinejoin="round"></path><path d="M12 17h.01" strokeLinecap="round" strokeLinejoin="round"></path></svg>
               </div>
               <div className="col-start-2">
-                <div className="font-medium text-destructive">2 Overdue Items — <span className="font-normal text-muted-foreground">Students have unreturned books past their due dates. Librarian follow-up required.</span></div>
+                <div className="font-medium text-destructive">__   - 2 Overdue Items — <span className="font-normal text-muted-foreground">Students have unreturned books past their due dates. Librarian follow-up required.</span></div>
               </div>
             </div>
 
@@ -141,7 +141,7 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
                 <svg className="size-4" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"></circle></svg>
               </div>
               <div className="col-start-2">
-                <div className="font-medium">3 Titles Out of Stock — <span className="font-normal text-muted-foreground">No copies available for borrowing. Consider restocking.</span></div>
+                <div className="font-medium">__    - 3 Titles Out of Stock — <span className="font-normal text-muted-foreground">No copies available for borrowing. Consider restocking.</span></div>
               </div>
             </div>
           </div>
