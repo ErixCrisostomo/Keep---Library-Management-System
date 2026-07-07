@@ -46,6 +46,7 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
   const [auditQuery, setAuditQuery] = useState("");
   const [auditType, setAuditType] = useState<string>("all");
   const [auditPage, setAuditPage] = useState(1);
+  const [auditSort, setAuditSort] = useState<"latest" | "oldest">("latest");
   const perPage = 20;
 
   const auditTypes = useMemo(() => {
@@ -54,7 +55,7 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
   }, [logs]);
 
   const filteredLogs = useMemo(() => {
-    let out = logs.slice().reverse();
+    let out = logs.slice();
     if (auditType !== "all") out = out.filter((l) => l.type === auditType);
     if (auditQuery.trim()) {
       const q = auditQuery.toLowerCase();
@@ -65,8 +66,16 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
         (l.type || "").toLowerCase().includes(q)
       );
     }
+    out.sort((a, b) => {
+        const timeA = new Date(a.created_at).getTime();
+        const timeB = new Date(b.created_at).getTime();
+
+        return auditSort === "latest"
+            ? timeB - timeA
+            : timeA - timeB;
+    });
     return out;
-  }, [logs, auditQuery, auditType]);
+  }, [logs, auditQuery, auditType, auditSort]);
 
   const auditPageCount = Math.max(1, Math.ceil(filteredLogs.length / perPage));
   const auditPageItems = filteredLogs.slice((auditPage - 1) * perPage, auditPage * perPage);
@@ -193,7 +202,27 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
               {auditTypes.map((t) => <option key={t} value={t}>{(t || "").replace(/_/g, " ")}</option>)}
             </select>
             <div className="ml-auto flex items-center gap-3">
-              <div className="text-sm text-muted-foreground">{filteredLogs.length} record{filteredLogs.length !== 1 ? "s" : ""}</div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground">
+                  Sort:
+                </label>
+
+                <select
+                  value={auditSort}
+                  onChange={(e) => {
+                    setAuditSort(e.target.value as "latest" | "oldest");
+                    setAuditPage(1);
+                  }}
+                  className="text-xs px-2.5 py-1.5 bg-input-background border border-border rounded-lg"
+                >
+                  <option value="latest">Latest</option>
+                  <option value="oldest">Oldest</option>
+                </select>
+              </div>
+
+              <div className="text-sm text-muted-foreground">
+                {filteredLogs.length} record{filteredLogs.length !== 1 ? "s" : ""}
+              </div>
               <button className="px-3 py-2.5 text-sm rounded-md bg-secondary border border-border text-foreground inline-flex items-center" onClick={() => downloadCsv(filteredLogs)}><Download size={14} className="mr-2"/>Export CSV</button>
             </div>
           </div>

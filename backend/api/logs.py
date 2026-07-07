@@ -23,7 +23,7 @@ def list_logs(
     q: str | None = Query(None, description="Search text (book title, student name, id...)"),
     types: str | None = Query(None, description="Comma-separated Tx types to filter"),
     page: int = Query(1, ge=1),
-    per_page: int = Query(100, ge=1, le=1000),
+    per_page: int = Query(1000, ge=1, le=1000),
     sort_desc: bool = Query(True),
 ):
     """Return a filtered, paginated list of `TxLog` entries.
