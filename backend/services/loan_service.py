@@ -67,13 +67,10 @@ def _get_active_or_pending_loan(db: Session, student_id: str, book_id: str):
 def _log(db: Session, tx_type: models.TxTypeEnum, loan: models.Loan, actor_name: str) -> None:
     # Wrapper used internally to create an audit entry for loan operations.
     # This calls the centralized audit_service and intentionally swallows
-    # errors (rolling back) so the primary operation (checkout/return/etc.)
-    # does not fail due to an auditing problem.
-    try:
-        audit_service.log_tx(db=db, tx_type=tx_type, actor_name=actor_name, loan=loan)
-    except Exception:
-        # Best-effort logging: avoid breaking main flow if audit write fails
-        db.rollback()
+    # errors so the primary operation (checkout/return/etc.) does not fail
+    # due to an auditing problem. `audit_service.log_tx` performs its own
+    # session management and error handling, so callers can simply invoke it.
+    audit_service.log_tx(db=db, tx_type=tx_type, actor_name=actor_name, loan=loan)
 
 
 def list_logs(

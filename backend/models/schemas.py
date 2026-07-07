@@ -140,3 +140,36 @@ class StudentProfileOut(BaseModel):
     course: Optional[str] = None
     section: Optional[str] = None
     year_level: Optional[str] = None
+
+
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+
+class StaffCreate(BaseModel):
+    login_id: str
+    name: str
+    password: str
+    role: str  # "librarian" or "superadmin"
+
+class StaffUpdate(BaseModel):
+    login_id: Optional[str] = None
+    name: Optional[str] = None
+    password: Optional[str] = None
+
+class StudentCreate(BaseModel):
+    login_id: str
+    name: str
+    password: str
+    email: Optional[str] = None
+    course: Optional[str] = None
+    section: Optional[str] = None
+    year_level: Optional[str] = None
+
+class StudentUpdate(BaseModel):
+    login_id: Optional[str] = None
+    name: Optional[str] = None
+    password: Optional[str] = None
+    email: Optional[str] = None
+    course: Optional[str] = None
+    section: Optional[str] = None
+    year_level: Optional[str] = None

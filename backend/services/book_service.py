@@ -53,17 +53,15 @@ def create_book(db: Session, payload: schemas.BookCreate, actor_name: str = "sys
     db.commit()
     db.refresh(book)
     # audit: record creation with after snapshot
-    try:
-        audit_service.log_tx(
-            db=db,
-            tx_type=models.TxTypeEnum.add_book,
-            actor_name=actor_name,
-            book=book,
-            details={"action": "create_book"},
-            after={"id": book.id, "title": book.title, "author": book.author, "isbn": book.isbn, "total": book.total, "available": book.available},
-        )
-    except Exception:
-        db.rollback()
+    # Best-effort audit write (internal session) — no need for caller rollback.
+    audit_service.log_tx(
+        db=db,
+        tx_type=models.TxTypeEnum.add_book,
+        actor_name=actor_name,
+        book=book,
+        details={"action": "create_book"},
+        after={"id": book.id, "title": book.title, "author": book.author, "isbn": book.isbn, "total": book.total, "available": book.available},
+    )
     return book
 
 
@@ -83,18 +81,15 @@ def update_book(db: Session, book_id: str, payload: schemas.BookUpdate, actor_na
     db.commit()
     db.refresh(book)
     after = {"id": book.id, "title": book.title, "author": book.author, "isbn": book.isbn, "genre": book.genre, "total": book.total, "available": book.available}
-    try:
-        audit_service.log_tx(
-            db=db,
-            tx_type=models.TxTypeEnum.update_book,
-            actor_name=actor_name,
-            book=book,
-            details={"action": "update_book"},
-            before=before,
-            after=after,
-        )
-    except Exception:
-        db.rollback()
+    audit_service.log_tx(
+        db=db,
+        tx_type=models.TxTypeEnum.update_book,
+        actor_name=actor_name,
+        book=book,
+        details={"action": "update_book"},
+        before=before,
+        after=after,
+    )
     return book
 
 
@@ -111,13 +106,10 @@ def delete_book(db: Session, book_id: str, actor_name: str = "system") -> None:
     before = {"id": book.id, "title": book.title, "author": book.author, "isbn": book.isbn, "genre": book.genre, "total": book.total, "available": book.available}
     db.delete(book)
     db.commit()
-    try:
-        audit_service.log_tx(
-            db=db,
-            tx_type=models.TxTypeEnum.delete_book,
-            actor_name=actor_name,
-            details={"action": "delete_book"},
-            before=before,
-        )
-    except Exception:
-        db.rollback()
+    audit_service.log_tx(
+        db=db,
+        tx_type=models.TxTypeEnum.delete_book,
+        actor_name=actor_name,
+        details={"action": "delete_book"},
+        before=before,
+    )

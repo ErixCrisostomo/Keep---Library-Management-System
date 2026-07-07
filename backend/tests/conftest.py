@@ -21,10 +21,16 @@ def override_get_db():
     finally:
         db.close()
 
+# Create tables at import time so they exist before any fixtures/tests run
+import models.models  # noqa: F401
+# Ensure a fresh schema for each test run
+Base.metadata.drop_all(bind=engine)
+Base.metadata.create_all(bind=engine)
+
 
 def setup_module(module):
-    # Create tables in the test database before tests run
-    Base.metadata.create_all(bind=engine)
+    # kept for pytest compatibility
+    return
 
 
 def teardown_module(module):

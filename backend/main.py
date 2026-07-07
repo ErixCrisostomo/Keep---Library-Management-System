@@ -5,6 +5,9 @@ from api import auth, books, loans, reports, logs, staff, students
 from core.config import settings
 from database.database import Base, engine
 
+# Start/stop the in-process audit worker
+from services import audit_service
+
 # Create tables if they don't exist. For production, prefer Alembic migrations.
 Base.metadata.create_all(bind=engine)
 
@@ -30,3 +33,13 @@ app.include_router(students.router)
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.on_event("startup")
+def _on_startup():
+    audit_service.start_worker()
+
+
+@app.on_event("shutdown")
+def _on_shutdown():
+    audit_service.stop_worker()

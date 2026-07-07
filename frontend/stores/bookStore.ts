@@ -32,6 +32,12 @@ export const useBookStore = create<BookState>((set, get) => ({
     try {
       const book = await bookService.create(form);
       set({ books: [...get().books, book], isLoading: false });
+      // Notify listeners (e.g., SuperAdmin logs UI) that audit data may have changed
+      try {
+        window.dispatchEvent(new CustomEvent("audit:refresh"));
+      } catch (e) {
+        // ignore in non-browser test environments
+      }
       return book;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to add book.";
@@ -45,6 +51,11 @@ export const useBookStore = create<BookState>((set, get) => ({
     try {
       const updated = await bookService.update(id, form);
       set({ books: get().books.map((b) => (b.id === id ? updated : b)), isLoading: false });
+      try {
+        window.dispatchEvent(new CustomEvent("audit:refresh"));
+      } catch (e) {
+        // ignore
+      }
       return updated;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to update book.";
@@ -58,6 +69,11 @@ export const useBookStore = create<BookState>((set, get) => ({
     try {
       await bookService.remove(id);
       set({ books: get().books.filter((b) => b.id !== id), isLoading: false });
+      try {
+        window.dispatchEvent(new CustomEvent("audit:refresh"));
+      } catch (e) {
+        // ignore
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to delete book.";
       set({ error: message, isLoading: false });

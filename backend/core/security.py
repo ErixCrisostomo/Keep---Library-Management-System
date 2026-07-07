@@ -80,3 +80,9 @@ def require_librarian(user: CurrentUser = Depends(get_current_user)) -> CurrentU
     if user.role not in ("librarian", "superadmin"):
         raise HTTPException(status_code=403, detail="Librarian access required")
     return user
+
+
+def require_superadmin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    if user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+    return user

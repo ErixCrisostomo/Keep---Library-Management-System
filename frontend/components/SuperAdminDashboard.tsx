@@ -7,18 +7,72 @@
  * - Dashboard cards (global stats)
  * - Audit Log table with search, filters, CSV export and pagination
  * - Combined Users & Accounts view
- *
- * Props: `staff`, `books`, `loans`, `logs` are normally provided by the
- * container page which fetches them from the API. `logs` is an array of
- * `TxLog` records and is used to populate the Audit Log table.
  */
-import { useMemo, useState } from "react";
-import { ShieldCheck, Users, BarChart3, History, Download, Search, Lock, AlertTriangle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ShieldCheck, Users, BarChart3, History, Download, Search, Lock, AlertTriangle, Pencil, Trash2, UserPlus } from "lucide-react";
 import { Pager } from "@/components/Pager";
 import { TX_COLORS } from "./HistoryTab";
+import { AccountModal } from "@/components/AccountModal";
 import { StaffProfile, Book, Loan, TxLog, StudentProfile } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 import { useStudents } from "@/hooks/useStudents";
+import { api, ApiError } from "@/services/api";
+
+
+
+// --- DYNAMIC LOG HELPERS ---
+// These functions automatically figure out what to display based on the log data,
+// meaning you never have to hardcode columns like "Book Title" or "Student" again.
+
+function getTargetLabel(log: TxLog): string {
+  if (log.book_title) return `"${log.book_title}"`;
+  if (log.student_name && !log.book_title) return `${log.student_name}`;
+  if (log.details?.target_type) return `${log.details.target_type}: ${log.details.target_name || log.details.target_id || ""}`;
+  return "System";
+}
+
+function getContextDetails(log: TxLog): string {
+  const parts: string[] = [];
+
+  // 1. Handle Book + Student combinations (Loans)
+  if (log.student_name && log.book_title) {
+    parts.push(`Student: ${log.student_name} (${log.student_login_id || "N/A"})`);
+  } else if (log.student_name && !log.book_title) {
+    parts.push(`ID: ${log.student_login_id || "N/A"}`);
+  }
+
+  // 2. Handle specific field changes for updates
+  if (log.type.includes("update") && log.before_data && log.after_data) {
+    const changes: string[] = [];
+    for (const key in log.before_data) {
+      if (log.before_data[key] !== log.after_data[key]) {
+        // Don't show ID changes to keep it concise
+        if (key === "id") continue; 
+        changes.push(`${key}: "${log.before_data[key]}" → "${log.after_data[key]}"`);
+      }
+    }
+    if (changes.length > 0) {
+      parts.push(`Changed: ${changes.join(", ")}`);
+    }
+  }
+
+  // 3. Handle Deletion context
+  if (log.type.includes("delete") && log.before_data) {
+    const info = Object.entries(log.before_data)
+      .filter(([k]) => k !== "id")
+      .map(([k, v]) => `${k}: "${v}"`)
+      .join(", ");
+    if (info) parts.push(`Deleted data: ${info}`);
+  }
+
+  // 4. Handle generic details (Reasons, Messages, IPs)
+  if (log.details?.reason) parts.push(`Reason: ${log.details.reason}`);
+  if (log.details?.message) parts.push(`Msg: ${log.details.message}`);
+  if (log.ip_address) parts.push(`IP: ${log.ip_address}`);
+
+  return parts.length > 0 ? parts.join(" | ") : "—";
+}
+
 
 export function SuperAdminDashboard({ staff, books, loans, logs }: {
   staff: StaffProfile[];
@@ -26,15 +80,47 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
   loans: Loan[];
   logs: TxLog[];
 }) {
-  /*
-   * Note on `logs` handling:
-   * - `logs` is expected to be an array of audit records with fields like
-   *   id, type, book_title, student_name, student_login_id, actor_name, created_at.
-   * - The UI keeps `logs` immutable and derives `auditTypes` / `filteredLogs`
-   *   so sorting and pagination happen client-side for small result sets.
-   */
-  const { students } = useStudents();
+  const { students: initialStudents } = useStudents();
+  const [localStaff, setLocalStaff] = useState(staff);
+  const [localStudents, setLocalStudents] = useState(initialStudents);
+  
+  // Keep local state in sync when initial data finishes loading
+  useEffect(() => { setLocalStaff(staff); }, [staff]);
+  useEffect(() => { setLocalStudents(initialStudents); }, [initialStudents]);
+
   const [tab, setTab] = useState<"dashboard" | "audit" | "accounts">("dashboard");
+
+  // Modal State
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create_student" | "create_staff" | "edit">("create_student");
+  const [editingAccount, setEditingAccount] = useState<any>(null);
+
+  const refreshAccounts = async () => {
+    try {
+      const [fetchedStaff, fetchedStudents] = await Promise.all([
+        api.get<StaffProfile[]>('/api/staff'),
+        api.get<StudentProfile[]>('/api/students')
+      ]);
+      setLocalStaff(fetchedStaff);
+      setLocalStudents(fetchedStudents);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleDelete = async (account: any) => {
+    if (!confirm(`Are you sure you want to delete ${account.name}?`)) return;
+    const isStaff = account.id.startsWith("staff-");
+    const realId = account.id.replace("staff-", "").replace("student-", ""); 
+    const path = isStaff ? `/api/staff/${realId}` : `/api/students/${realId}`;
+    try {
+      await api.delete(path);
+      await refreshAccounts();
+    } catch (err) {
+      if (err instanceof ApiError) alert(`Delete failed: ${err.message}`);
+      else alert("An unexpected error occurred.");
+    }
+  };
 
   const activeLoans = loans.filter((l) => l.status === "Active");
   const overdueLoans = loans.filter((l) => l.status === "Overdue");
@@ -63,16 +149,14 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
         (l.book_title || "").toLowerCase().includes(q) ||
         (l.student_login_id || "").toLowerCase().includes(q) ||
         (l.actor_name || "").toLowerCase().includes(q) ||
-        (l.type || "").toLowerCase().includes(q)
+        (l.type || "").toLowerCase().includes(q) ||
+        (l.details?.message || "").toLowerCase().includes(q) // Future proofed for error logs
       );
     }
     out.sort((a, b) => {
         const timeA = new Date(a.created_at).getTime();
         const timeB = new Date(b.created_at).getTime();
-
-        return auditSort === "latest"
-            ? timeB - timeA
-            : timeA - timeB;
+        return auditSort === "latest" ? timeB - timeA : timeA - timeB;
     });
     return out;
   }, [logs, auditQuery, auditType, auditSort]);
@@ -81,11 +165,22 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
   const auditPageItems = filteredLogs.slice((auditPage - 1) * perPage, auditPage * perPage);
 
   function downloadCsv(items: TxLog[]) {
-    // Client-side CSV export: create a Blob and trigger download.
-    // This keeps the UI responsive and avoids server-side CSV generation.
     if (!items.length) return;
-    const headers = ["id", "type", "book_title", "student_login_id", "actor_name", "loan_id", "created_at"];
-    const rows = items.map((r) => headers.map((h) => JSON.stringify((r as any)[h] ?? "")).join(","));
+    // UPDATED: Added actor, details, before/after to CSV export
+    const headers = ["id", "created_at", "actor_name", "type", "target", "context_details", "ip_address"];
+    const rows = items.map((r) => {
+      const target = r.book_title || r.student_name || (r.details?.target_type || "System");
+      const context = getContextDetails(r);
+      return [
+        r.id,
+        new Date(r.created_at).toISOString(),
+        r.actor_name,
+        r.type,
+        target,
+        `"${context.replace(/"/g, '""')}"`, // Escape quotes for CSV
+        r.ip_address || ""
+      ].join(",");
+    });
     const csv = `${headers.join(",")}\n${rows.join("\n")}`;
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -100,13 +195,10 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
 
   // Users & Accounts combined list
   const combinedAccounts = useMemo(() => {
-    // Combine staff and student lists into a single sortable array used
-    // by the Accounts table. IDs are namespaced (staff-..., student-...) so
-    // the UI can use a single `key` field and still distinguish types.
-    const staffRows = staff.map((s) => ({ id: `staff-${s.id}`, name: s.name, login_id: s.login_id, type: s.role || "staff" }));
-    const studentRows = students.map((s: StudentProfile) => ({ id: `student-${s.id}`, name: s.name, login_id: s.login_id, type: "student" }));
+    const staffRows = localStaff.map((s) => ({ ...s, id: `staff-${s.id}`, type: s.role || "staff" }));
+    const studentRows = localStudents.map((s: StudentProfile) => ({ ...s, id: `student-${s.id}`, type: "student" }));
     return [...staffRows, ...studentRows].sort((a, b) => a.name.localeCompare(b.name));
-  }, [staff, students]);
+  }, [localStaff, localStudents]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -118,23 +210,20 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
           </div>
         </div>
         <div className="flex gap-1 border-b border-border mt-4 overflow-x-auto">
-          <button onClick={() => setTab("dashboard")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tab === "dashboard" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
+          <button onClick={() => setTab("dashboard")} className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tab === "dashboard" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
             <Users size={14} /> Dashboard
           </button>
-          <button onClick={() => setTab("audit")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tab === "audit" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
+          <button onClick={() => setTab("audit")} className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tab === "audit" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
             <History size={14} /> Audit Log
           </button>
-          <button onClick={() => setTab("accounts")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tab === "accounts" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
+          <button onClick={() => setTab("accounts")} className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tab === "accounts" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
             <ShieldCheck size={14} /> Users & Accounts
           </button>
         </div>
       </div>
+
       {tab === "dashboard" && (
         <div className="space-y-6">
-          {/* Alert center (prototype-inspired) */}
           <div className="space-y-3">
             <div className="relative w-full rounded-lg border px-4 py-3 text-sm grid grid-cols-[0_1fr] items-start bg-card text-card-foreground">
               <div className="col-start-1 pr-3 text-destructive self-start">
@@ -144,7 +233,6 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
                 <div className="font-medium text-destructive">__   - 2 Overdue Items — <span className="font-normal text-muted-foreground">Students have unreturned books past their due dates. Librarian follow-up required.</span></div>
               </div>
             </div>
-
             <div className="relative w-full rounded-lg border px-4 py-3 text-sm grid grid-cols-[0_1fr] items-start bg-card text-card-foreground">
               <div className="col-start-1 pr-3 text-muted-foreground self-start">
                 <svg className="size-4" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"></circle></svg>
@@ -155,17 +243,16 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
             </div>
           </div>
 
-          {/* Global statistics grid (prototype style) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { label: "Total Book Titles", value: totalBooks, meta: "volumes total", icon: BarChart3 },
                 { label: "Available Copies", value: books.reduce((s, b) => s + b.available, 0), meta: "checked out", icon: ShieldCheck },
                 { label: "Active Loans", value: activeLoans.length, meta: `${overdueLoans.length} overdue`, icon: History },
                 { label: "Pending Requests", value: 0, meta: "Awaiting action", icon: Search },
-                { label: "Registered Students", value: students.length, meta: "Active accounts", icon: Users },
+                { label: "Registered Students", value: localStudents.length, meta: "Active accounts", icon: Users },
                 { label: "Out-of-Stock Titles", value: books.filter(b => b.available === 0).length, meta: "Need restocking", icon: AlertTriangle },
-                { label: "Total Transactions", value: totalTransactions, meta: "This session", icon: BarChart3 },
-                { label: "System Accounts", value: staff.length, meta: "1 librarian · 5 students · 1 admin", icon: ShieldCheck },
+                { label: "Total Transactions", value: totalTransactions, meta: "All time", icon: BarChart3 },
+                { label: "System Accounts", value: localStaff.length, meta: `${localStaff.filter(s=>s.role==='librarian').length} librarians · ${localStudents.length} students`, icon: ShieldCheck },
               ].map((card) => {
                 const Icon = card.icon;
                 return (
@@ -179,7 +266,6 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
               })}
           </div>
 
-          {/* System health / monitor placeholder */}
           <div className="bg-card border border-border rounded-xl p-4">
             <div className="text-sm font-medium mb-2">System Health Monitor</div>
             <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
@@ -195,7 +281,7 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
           <div className="flex items-center gap-3">
             <div className="relative w-full">
               <Search size={16} className="absolute left-4 top-3 text-muted-foreground" />
-              <input value={auditQuery} onChange={(e) => { setAuditQuery(e.target.value); setAuditPage(1); }} placeholder="Search by book, student, ID, or type..." className="w-full pl-12 pr-3 py-3 text-sm bg-input-background border border-border rounded-full focus:outline-none focus:ring-2 focus:ring-ring/30 text-foreground" />
+              <input value={auditQuery} onChange={(e) => { setAuditQuery(e.target.value); setAuditPage(1); }} placeholder="Search by actor, target, changes, or type..." className="w-full pl-12 pr-3 py-3 text-sm bg-input-background border border-border rounded-full focus:outline-none focus:ring-2 focus:ring-ring/30 text-foreground" />
             </div>
             <select value={auditType} onChange={(e) => { setAuditType(e.target.value); setAuditPage(1); }} className="text-sm px-3 py-2 bg-input-background border border-border rounded-lg text-foreground">
               <option value="all">All Types</option>
@@ -203,65 +289,78 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
             </select>
             <div className="ml-auto flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <label className="text-xs text-muted-foreground">
-                  Sort:
-                </label>
-
-                <select
-                  value={auditSort}
-                  onChange={(e) => {
-                    setAuditSort(e.target.value as "latest" | "oldest");
-                    setAuditPage(1);
-                  }}
-                  className="text-xs px-2.5 py-1.5 bg-input-background border border-border rounded-lg"
-                >
+                <label className="text-xs text-muted-foreground">Sort:</label>
+                <select value={auditSort} onChange={(e) => { setAuditSort(e.target.value as "latest" | "oldest"); setAuditPage(1); }} className="text-xs px-2.5 py-1.5 bg-input-background border border-border rounded-lg text-foreground">
                   <option value="latest">Latest</option>
                   <option value="oldest">Oldest</option>
                 </select>
               </div>
-
-              <div className="text-sm text-muted-foreground">
-                {filteredLogs.length} record{filteredLogs.length !== 1 ? "s" : ""}
-              </div>
+              <div className="text-sm text-muted-foreground">{filteredLogs.length} record{filteredLogs.length !== 1 ? "s" : ""}</div>
               <button className="px-3 py-2.5 text-sm rounded-md bg-secondary border border-border text-foreground inline-flex items-center" onClick={() => downloadCsv(filteredLogs)}><Download size={14} className="mr-2"/>Export CSV</button>
             </div>
           </div>
 
+          {/* --- NEW FLEXIBLE AUDIT TABLE --- */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="w-full overflow-x-auto">
               <table className="w-full text-xs">
-                <thead className="bg-secondary text-muted-foreground text-[12px]">
+                <thead className="bg-secondary text-muted-foreground text-[11px] uppercase tracking-wider">
                   <tr>
-                    <th className="text-left px-4 py-3">LOG ID</th>
-                    <th className="text-left px-4 py-3">EVENT TYPE</th>
-                    <th className="text-left px-4 py-3">BOOK TITLE</th>
-                    <th className="text-left px-4 py-3">STUDENT</th>
-                    <th className="text-left px-4 py-3">STUDENT NO.</th>
-                    <th className="text-right px-4 py-3">TIMESTAMP</th>
+                    <th className="text-left px-4 py-3 w-[180px]">When & Who</th>
+                    <th className="text-left px-4 py-3 w-[160px]">Event</th>
+                    <th className="text-left px-4 py-3 w-[220px]">Target</th>
+                    <th className="text-left px-4 py-3">Context & Details</th>
+                    <th className="text-right px-4 py-3 w-[80px]">Log ID</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border">
                   {auditPageItems.length === 0 ? (
-                    <tr><td colSpan={6} className="p-6 text-sm text-muted-foreground">No audit entries match your criteria.</td></tr>
-                  ) : auditPageItems.map((log, idx) => {
-                    const cfg = TX_COLORS[log.type];
-                    const Icon = cfg?.icon;
-                    const rowBg = idx % 2 === 0 ? "" : "bg-card/40";
+                    <tr><td colSpan={5} className="p-8 text-sm text-center text-muted-foreground">No audit entries match your criteria.</td></tr>
+                  ) : auditPageItems.map((log) => {
+                    const cfg = TX_COLORS[log.type] || { bg: "bg-gray-50", border: "border-gray-200", icon: History, iconColor: "text-gray-600", label: log.type };
+                    const Icon = cfg.icon;
+                    const target = getTargetLabel(log);
+                    const context = getContextDetails(log);
+                    
                     return (
-                      <tr key={log.id} className={`${rowBg} hover:bg-muted/30 border-b border-border`}>
-                        <td className="px-4 py-3 align-top font-mono text-[12px]">{log.id}</td>
+                      <tr key={log.id} className="hover:bg-muted/30 transition-colors">
+                        
+                        {/* WHEN & WHO */}
                         <td className="px-4 py-3 align-top">
-                          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-md border ${cfg?.bg ?? "bg-background"} ${cfg?.border ?? "border-border"}`}>
-                            <div className={`w-6 h-6 rounded-full bg-white/60 flex items-center justify-center border ${cfg?.border ?? "border-border"}`}>
-                              {Icon && <Icon size={14} className={cfg?.iconColor} />}
-                            </div>
-                            <div className="text-sm font-medium truncate">{(cfg?.label || log.type).replace(/_/g, " ")}</div>
+                          <div className="font-mono text-foreground whitespace-nowrap">{formatDate(new Date(log.created_at))}</div>
+                          <div className="text-muted-foreground mt-1 truncate text-[11px]">
+                            {log.actor_name || "System"}
                           </div>
                         </td>
-                        <td className="px-4 py-3 align-top text-sm text-muted-foreground">{log.book_title}</td>
-                        <td className="px-4 py-3 align-top text-sm">{log.student_name}</td>
-                        <td className="px-4 py-3 align-top text-sm font-mono text-muted-foreground">{log.student_login_id}</td>
-                        <td className="px-4 py-3 align-top text-right text-[11px] font-mono text-muted-foreground">{formatDate(new Date(log.created_at))}</td>
+
+                        {/* EVENT TYPE (Compact Badge) */}
+                        <td className="px-4 py-3 align-top">
+                          <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium ${cfg.bg} ${cfg.border}`}>
+                            <Icon size={12} className={cfg.iconColor} />
+                            {cfg.label}
+                          </div>
+                          {log.loan_id && (
+                            <div className="text-[10px] font-mono text-muted-foreground mt-1">Loan: {log.loan_id}</div>
+                          )}
+                        </td>
+
+                        {/* TARGET (Dynamic) */}
+                        <td className="px-4 py-3 align-top text-foreground font-medium truncate">
+                          {target}
+                        </td>
+
+                        {/* CONTEXT & DETAILS (Dynamic) */}
+                        <td className="px-4 py-3 align-top text-muted-foreground">
+                          <div className="line-clamp-3 whitespace-pre-line text-[11px] leading-relaxed">
+                            {context}
+                          </div>
+                        </td>
+
+                        {/* LOG ID */}
+                        <td className="px-4 py-3 align-top text-right font-mono text-muted-foreground text-[11px]">
+                          {log.id.split("-")[1]}
+                        </td>
+
                       </tr>
                     );
                   })}
@@ -282,7 +381,15 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
           <div className="col-span-1 lg:col-span-2">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold text-lg">System Accounts</h2>
-              <div className="text-sm text-muted-foreground">{combinedAccounts.length} of {combinedAccounts.length} accounts</div>
+              <div className="flex items-center gap-3">
+                <div className="text-sm text-muted-foreground">{combinedAccounts.length} accounts</div>
+                <button onClick={() => { setModalMode("create_student"); setEditingAccount(null); setIsModalOpen(true); }} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">
+                  <UserPlus size={14} /> Add Student
+                </button>
+                <button onClick={() => { setModalMode("create_staff"); setEditingAccount(null); setIsModalOpen(true); }} className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-border bg-card text-foreground hover:bg-muted/50">
+                  <UserPlus size={14} /> Add Staff
+                </button>
+              </div>
             </div>
 
             <div className="mb-4">
@@ -312,9 +419,9 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
                   <tr>
                     <th className="text-left px-4 py-3">ACCOUNT</th>
                     <th className="text-left px-4 py-3">ROLE</th>
-                    <th className="text-left px-4 py-3">EMAIL</th>
+                    <th className="text-left px-4 py-3">EMAIL / ID</th>
                     <th className="text-left px-4 py-3">STATUS</th>
-                    <th className="text-right px-4 py-3">LAST LOGIN</th>
+                    <th className="text-right px-4 py-3">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -322,17 +429,32 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
                     <tr key={a.id} className={`${idx % 2 === 0 ? "" : "bg-card/40"} hover:bg-muted/30 border-b border-border`}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground">{a.name.split(" ")[0].charAt(0)}</div>
+                          <div className="w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground font-medium">{a.name.split(" ")[0].charAt(0)}</div>
                           <div>
                             <div className="font-medium">{a.name}</div>
-                            <div className="text-xs text-muted-foreground font-mono">{a.login_id}</div>
+                            <div className="text-xs text-muted-foreground font-mono">{a.id}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm"><span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-3 py-1 text-[11px] font-medium capitalize">{a.type}</span></td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{a.login_id.includes("@") ? a.login_id : "—"}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium capitalize ${
+                          a.type === "superadmin" ? "bg-amber-50 text-amber-700" : 
+                          a.type === "librarian" ? "bg-blue-50 text-blue-700" : 
+                          "bg-primary/10 text-primary"
+                        }`}>{a.type}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground font-mono">{a.login_id}</td>
                       <td className="px-4 py-3 text-sm"><span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-3 py-1 text-[11px] font-medium">Active</span></td>
-                      <td className="px-4 py-3 text-right text-sm text-muted-foreground">Jun 28, 2026</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={() => { setModalMode("edit"); setEditingAccount(a); setIsModalOpen(true); }} className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors" title="Edit Account">
+                            <Pencil size={14} />
+                          </button>
+                          <button onClick={() => handleDelete(a)} className="p-1.5 rounded-md border border-border text-destructive hover:bg-destructive/10 transition-colors" title="Delete Account">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -341,6 +463,13 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
           </div>
         </div>
       )}
+      <AccountModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        onSuccess={refreshAccounts} 
+        mode={modalMode}
+        editData={editingAccount}
+      />
     </div>
   );
 }

@@ -3,8 +3,11 @@ export type LoanStatus = "Requested" | "Active" | "Overdue" | "Return Requested"
 export type SortOption = "az" | "za" | "avail-desc" | "avail-asc" | "available-only" | "out-of-stock";
 export type TxType =
   | "request_borrow" | "approve_borrow" | "reject_borrow"
-  | "request_return" | "approve_return" | "direct_checkout" | "direct_return";
-  | "reject_return";
+  | "request_return" | "approve_return" | "reject_return"
+  | "direct_checkout" | "direct_return"
+  | "login" | "logout"
+  | "add_book" | "update_book" | "delete_book" | "inventory_change"
+  | "create_account" | "update_account" | "delete_account";
 
 export interface AuthUser {
   id: string;
@@ -67,15 +70,21 @@ export interface ReportSummary {
 export interface TxLog {
   id: string;
   type: TxType;
-  book_id: string | null;
+  book_id?: string | null;
   book_title: string;
   author: string;
-  student_id: string | null;
+  student_id?: string | null;
   student_name: string;
   student_login_id: string;
-  loan_id: string | null;
+  loan_id?: string | null;
   actor_name: string;
-  created_at: string; // ISO datetime
+  details?: Record<string, any> | null; // ADDED
+  before_data?: Record<string, any> | null; // ADDED
+  after_data?: Record<string, any> | null; // ADDED
+  ip_address?: string | null; // ADDED
+  user_agent?: string | null; // ADDED
+  source?: string | null; // ADDED
+  created_at: string | Date;
 }
 
 export interface StudentProfile {
