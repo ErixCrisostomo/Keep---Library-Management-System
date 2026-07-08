@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from core.security import require_superadmin, CurrentUser, hash_password
+from core.security import require_librarian, require_superadmin, CurrentUser, hash_password
 from database.database import get_db
 from models import models, schemas
 from services import audit_service
@@ -21,7 +21,7 @@ def _get_staff_by_id(db: Session, staff_id: str):
 @router.get("", response_model=list[schemas.UserOut])
 def list_staff(
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_superadmin),
+    _: CurrentUser = Depends(require_librarian), 
 ):
     librarians = db.query(models.Librarian).all()
     superadmins = db.query(models.SuperAdmin).all()

@@ -209,7 +209,7 @@ export function HistoryTab({ logs, showStudentInfo = true }: { logs: TxLog[]; sh
                     
                     <div className="flex flex-col items-start gap-1 text-left md:items-end md:text-right">
                       {log.loan_id && <span className="text-[10px] font-mono text-muted-foreground bg-white/60 px-1.5 py-0.5 rounded">{log.loan_id}</span>}
-                      <span className="text-[10px] font-mono text-muted-foreground">{formatDateTime(log.created_at)}</span>
+                      <span className="text-[10px] font-mono text-muted-foreground">{formatDateTime(String(log.created_at))}</span>
                       {/* Actor name (Librarian/SuperAdmin) will always show up here now */}
                       <span className="text-[10px] font-mono text-muted-foreground">by {log.actor_name}</span>
                     </div>

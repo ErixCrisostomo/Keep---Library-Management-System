@@ -142,9 +142,6 @@ class StudentProfileOut(BaseModel):
     year_level: Optional[str] = None
 
 
-from pydantic import BaseModel, EmailStr
-from typing import Optional
-
 class StaffCreate(BaseModel):
     login_id: str
     name: str

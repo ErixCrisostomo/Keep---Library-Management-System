@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from core.security import require_superadmin, CurrentUser, hash_password
+from core.security import require_librarian, require_superadmin, CurrentUser, hash_password
 from database.database import get_db
 from models import models, schemas
 from services import audit_service
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/students", tags=["students"])
 @router.get("", response_model=list[schemas.StudentProfileOut])
 def list_students(
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_superadmin), # Locked to Super Admin
+    _: CurrentUser = Depends(require_librarian),
 ):
     return db.query(models.Student).order_by(models.Student.name).all()
 

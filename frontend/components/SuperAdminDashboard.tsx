@@ -91,23 +91,6 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
 
   const [tab, setTab] = useState<"dashboard" | "audit" | "accounts">("dashboard");
 
-  // Modal State
-
-  // Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<"create_student" | "create_staff" | "edit">("create_student");
-  const [editingAccount, setEditingAccount] = useState<any>(null);
-
-  const refreshAccounts = async () => {
-    try {
-      const [fetchedStaff, fetchedStudents] = await Promise.all([
-        api.get<StaffProfile[]>('/api/staff'),
-        api.get<StudentProfile[]>('/api/students')
-      ]);
-      setLocalStaff(fetchedStaff);
-      setLocalStudents(fetchedStudents);
-    } catch (err) { console.error(err); }
-  };
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);

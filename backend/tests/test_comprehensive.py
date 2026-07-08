@@ -321,7 +321,7 @@ def test_duplicate_isbn_rejected(client, db_session, librarian_token):
 
 
 def test_no_available_copies_prevents_checkout(client, db_session, librarian_token, student_token):
-    """Requesting a book with no copies should fail."""
+    """Requesting a book with no available copies should fail."""
     lib_headers = {"Authorization": f"Bearer {librarian_token}"}
     student_headers = {"Authorization": f"Bearer {student_token}"}
 
@@ -339,8 +339,13 @@ def test_no_available_copies_prevents_checkout(client, db_session, librarian_tok
     # First student requests it
     req1 = client.post("/api/loans/borrow-request", json={"book_id": book["id"]}, headers=student_headers)
     assert req1.status_code == 200
+    loan_id = req1.json()["id"]
 
-    # Second student tries to request (should fail)
+    # Librarian APPROVES the request (This is when the available count drops to 0)
+    approve_resp = client.post(f"/api/loans/{loan_id}/approve-borrow", headers=lib_headers)
+    assert approve_resp.status_code == 200
+
+    # Second student tries to request (should NOW fail because available is 0)
     student2 = Student(login_id=f"STU-{uuid.uuid4().hex[:8]}", name="Charlie", hashed_password=hash_password("pass"))
     db_session.add(student2)
     db_session.commit()

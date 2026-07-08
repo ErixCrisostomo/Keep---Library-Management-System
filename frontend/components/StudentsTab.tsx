@@ -214,7 +214,7 @@ export function StudentsTab({ students, loans, logs }: { students: StudentProfil
               ) : (
                 <div className="flex flex-col gap-2">
                   {pagedSelectedLogs.map((log) => {
-                    const cfg = TX_COLORS[log.type];
+                    const cfg = TX_COLORS[log.type] || { bg: "bg-gray-50", border: "border-gray-200", icon: History, iconColor: "text-gray-600", label: log.type };
                     const Icon = cfg.icon;
                     return (
                       <div key={log.id} className={`flex flex-col gap-3 p-3 rounded-xl border ${cfg.bg} ${cfg.border}`}>
