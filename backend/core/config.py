@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     LOAN_PERIOD_DAYS: int = 14
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
+    MAIN_ADMIN_LOGIN_ID: str = "mainadmin@email.com"
+    
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

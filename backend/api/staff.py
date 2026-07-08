@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.security import require_librarian, require_superadmin, CurrentUser, hash_password
 from database.database import get_db
 from models import models, schemas
 from services import audit_service
+from typing import cast
+
 
 router = APIRouter(prefix="/api/staff", tags=["staff"])
 
@@ -90,11 +93,11 @@ def update_staff(
     before = {"id": staff.id, "name": staff.name, "login_id": staff.login_id}
 
     if payload.name is not None:
-        staff.name = payload.name
+        setattr(staff, "name", payload.name)
     if payload.login_id is not None:
-        staff.login_id = payload.login_id
+        setattr(staff, "login_id", payload.login_id)
     if payload.password is not None:
-        staff.hashed_password = hash_password(payload.password)
+        setattr(staff, "hashed_password", hash_password(payload.password))
 
     db.commit()
     db.refresh(staff)
@@ -120,11 +123,15 @@ def delete_staff(
     if not staff:
         raise HTTPException(status_code=404, detail="Staff not found.")
 
-    # SECURITY CHECK 1: Cannot delete yourself
+ # SECURITY CHECK 1: Cannot delete yourself
     if current_user.id == staff_id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account.")
 
-    # SECURITY CHECK 2: Cannot delete the last Super Admin (Brick Prevention)
+    # SECURITY CHECK 2: Cannot delete the Main Primary Admin Account
+    if cast(str, staff.login_id) == settings.MAIN_ADMIN_LOGIN_ID:
+        raise HTTPException(status_code=400, detail="Cannot delete the primary System Administrator account.")
+
+    # SECURITY CHECK 3: Cannot delete the last Super Admin (Brick Prevention)
     if role == "superadmin":
         sa_count = db.query(models.SuperAdmin).count()
         if sa_count <= 1:

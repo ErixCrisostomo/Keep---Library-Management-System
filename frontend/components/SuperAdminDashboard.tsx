@@ -237,24 +237,38 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
 
       {tab === "dashboard" && (
         <div className="space-y-6">
-          <div className="space-y-3">
-            <div className="relative w-full rounded-lg border px-4 py-3 text-sm grid grid-cols-[0_1fr] items-start bg-card text-card-foreground">
-              <div className="col-start-1 pr-3 text-destructive self-start">
-                <svg className="size-4" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><path d="M12 9v4" strokeLinecap="round" strokeLinejoin="round"></path><path d="M12 17h.01" strokeLinecap="round" strokeLinejoin="round"></path></svg>
-              </div>
-              <div className="col-start-2">
-                <div className="font-medium text-destructive">__   - 2 Overdue Items — <span className="font-normal text-muted-foreground">Students have unreturned books past their due dates. Librarian follow-up required.</span></div>
-              </div>
+          {/* Dynamic Alert Center */}
+          {(overdueLoans.length > 0 || books.filter(b => b.available === 0).length > 0) && (
+            <div className="space-y-3">
+              {overdueLoans.length > 0 && (
+                <div className="flex items-start gap-3 rounded-lg border border-destructive/30 px-4 py-3 text-sm bg-destructive/5 text-card-foreground">
+                  <div className="text-destructive shrink-0 mt-0.5">
+                    <AlertTriangle size={18} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium text-destructive">
+                      {overdueLoans.length} Overdue Item{overdueLoans.length !== 1 ? "s" : ""} — 
+                      <span className="font-normal text-muted-foreground">Students have unreturned books past their due dates. Librarian follow-up required.</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {books.filter(b => b.available === 0).length > 0 && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-200 px-4 py-3 text-sm bg-amber-50 text-card-foreground">
+                  <div className="text-amber-600 shrink-0 mt-0.5">
+                    <svg className="size-4" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium text-amber-700">
+                      {books.filter(b => b.available === 0).length} Title{books.filter(b => b.available === 0).length !== 1 ? "s" : ""} Out of Stock — 
+                      <span className="font-normal text-muted-foreground">No copies available for borrowing. Consider restocking.</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="relative w-full rounded-lg border px-4 py-3 text-sm grid grid-cols-[0_1fr] items-start bg-card text-card-foreground">
-              <div className="col-start-1 pr-3 text-muted-foreground self-start">
-                <svg className="size-4" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"></circle></svg>
-              </div>
-              <div className="col-start-2">
-                <div className="font-medium">__    - 3 Titles Out of Stock — <span className="font-normal text-muted-foreground">No copies available for borrowing. Consider restocking.</span></div>
-              </div>
-            </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
@@ -460,12 +474,24 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
                       <td className="px-4 py-3 text-sm"><span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-3 py-1 text-[11px] font-medium">Active</span></td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => { setModalMode("edit"); setEditingAccount(a); setIsModalOpen(true); }} className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors" title="Edit Account">
+                          {/* Main Admin can only be edited, not deleted */}
+                          <button 
+                            onClick={() => { setModalMode("edit"); setEditingAccount(a); setIsModalOpen(true); }} 
+                            className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors" 
+                            title="Edit Account"
+                          >
                             <Pencil size={14} />
                           </button>
-                          <button onClick={() => requestDelete(a)} className="p-1.5 rounded-md border border-border text-destructive hover:bg-destructive/10 transition-colors" title="Delete Account">
-                            <Trash2 size={14} />
-                          </button>
+                          
+                          {a.login_id !== "mainadmin@email.com" && (
+                            <button 
+                              onClick={() => requestDelete(a)} 
+                              className="p-1.5 rounded-md border border-border text-destructive hover:bg-destructive/10 transition-colors" 
+                              title="Delete Account"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
