@@ -2,11 +2,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # JWT — REQUIRED; must be set in .env (no insecure default)
+    JWT_SECRET_KEY: str
+
     # Database
     DATABASE_URL: str = "postgresql://keep_user:keep_password@localhost:5432/keep_db"
 
     # JWT
-    JWT_SECRET_KEY: str = "change-this-secret-in-production"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 60 * 12  # 12 hours
 

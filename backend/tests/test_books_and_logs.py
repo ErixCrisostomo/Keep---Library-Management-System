@@ -1,5 +1,5 @@
 from core.security import hash_password
-from models.models import Librarian, Book, TxLog
+from models.models import Librarian
 
 
 def test_book_crud_and_audit(client, db_session):

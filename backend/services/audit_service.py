@@ -10,7 +10,6 @@ from typing import Optional
 from queue import Queue, Empty
 from threading import Thread, Event
 import time
-import json
 import logging
 
 from sqlalchemy.orm import Session

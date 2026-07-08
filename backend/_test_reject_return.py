@@ -1,4 +1,3 @@
-from sqlalchemy.orm import Session
 from database.database import SessionLocal
 from services import loan_service
 from models import models

@@ -17,6 +17,7 @@ import { StaffProfile, Book, Loan, TxLog, StudentProfile } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 import { useStudents } from "@/hooks/useStudents";
 import { api, ApiError } from "@/services/api";
+import { ConfirmModal } from "@/components/ConfirmModal";
 
 
 
@@ -108,17 +109,46 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
     } catch (err) { console.error(err); }
   };
 
-  const handleDelete = async (account: any) => {
-    if (!confirm(`Are you sure you want to delete ${account.name}?`)) return;
-    const isStaff = account.id.startsWith("staff-");
-    const realId = account.id.replace("staff-", "").replace("student-", ""); 
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create_student" | "create_staff" | "edit">("create_student");
+  const [editingAccount, setEditingAccount] = useState<any>(null);
+
+  // Delete Confirmation State
+  const [deleteTarget, setDeleteTarget] = useState<{id: string, name: string} | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const refreshAccounts = async () => {
+    try {
+      const [fetchedStaff, fetchedStudents] = await Promise.all([
+        api.get<StaffProfile[]>('/api/staff'),
+        api.get<StudentProfile[]>('/api/students')
+      ]);
+      setLocalStaff(fetchedStaff);
+      setLocalStudents(fetchedStudents);
+    } catch (err) { console.error(err); }
+  };
+
+  const requestDelete = (account: any) => {
+    setDeleteTarget({ id: account.id, name: account.name });
+  };
+
+  const executeDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    const isStaff = deleteTarget.id.startsWith("staff-");
+    const realId = deleteTarget.id.replace("staff-", "").replace("student-", "");
     const path = isStaff ? `/api/staff/${realId}` : `/api/students/${realId}`;
+    
     try {
       await api.delete(path);
+      setDeleteTarget(null); // Close modal on success
       await refreshAccounts();
     } catch (err) {
       if (err instanceof ApiError) alert(`Delete failed: ${err.message}`);
       else alert("An unexpected error occurred.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -450,7 +480,7 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
                           <button onClick={() => { setModalMode("edit"); setEditingAccount(a); setIsModalOpen(true); }} className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors" title="Edit Account">
                             <Pencil size={14} />
                           </button>
-                          <button onClick={() => handleDelete(a)} className="p-1.5 rounded-md border border-border text-destructive hover:bg-destructive/10 transition-colors" title="Delete Account">
+                          <button onClick={() => requestDelete(a)} className="p-1.5 rounded-md border border-border text-destructive hover:bg-destructive/10 transition-colors" title="Delete Account">
                             <Trash2 size={14} />
                           </button>
                         </div>
@@ -463,6 +493,14 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
           </div>
         </div>
       )}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Confirm Deletion"
+        message={`Are you sure you want to permanently delete "${deleteTarget?.name}"? This action cannot be undone and will log you out if you are deleting your own session.`}
+        onConfirm={executeDelete}
+        onClose={() => !isDeleting && setDeleteTarget(null)}
+        isLoading={isDeleting}
+      />
       <AccountModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 

@@ -9,7 +9,6 @@ from services import audit_service
 router = APIRouter(prefix="/api/staff", tags=["staff"])
 
 def _get_staff_by_id(db: Session, staff_id: str):
-    """Helper to find a staff member across both Librarian and SuperAdmin tables."""
     librarian = db.query(models.Librarian).filter(models.Librarian.id == staff_id).first()
     if librarian:
         return librarian, "librarian"
@@ -22,7 +21,7 @@ def _get_staff_by_id(db: Session, staff_id: str):
 @router.get("", response_model=list[schemas.UserOut])
 def list_staff(
     db: Session = Depends(get_db),
-    _: CurrentUser = Depends(require_superadmin), # Locked to Super Admin
+    _: CurrentUser = Depends(require_superadmin),
 ):
     librarians = db.query(models.Librarian).all()
     superadmins = db.query(models.SuperAdmin).all()
@@ -38,7 +37,6 @@ def create_staff(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(require_superadmin),
 ):
-    # Prevent duplicate login IDs across both tables
     exists_lib = db.query(models.Librarian).filter(models.Librarian.login_id == payload.login_id).first()
     exists_sa = db.query(models.SuperAdmin).filter(models.SuperAdmin.login_id == payload.login_id).first()
     if exists_lib or exists_sa:
@@ -82,6 +80,13 @@ def update_staff(
     if not staff:
         raise HTTPException(status_code=404, detail="Staff not found.")
 
+    # SECURITY: Prevent a Super Admin from demoting themselves
+    if current_user.id == staff_id:
+        if payload.login_id and payload.login_id != staff.login_id:
+            raise HTTPException(status_code=400, detail="Cannot change your own login ID.")
+        # You can allow them to change their own name/password, but role changes are blocked implicitly 
+        # because we don't send 'role' in StaffUpdate.
+
     before = {"id": staff.id, "name": staff.name, "login_id": staff.login_id}
 
     if payload.name is not None:
@@ -114,6 +119,16 @@ def delete_staff(
     staff, role = _get_staff_by_id(db, staff_id)
     if not staff:
         raise HTTPException(status_code=404, detail="Staff not found.")
+
+    # SECURITY CHECK 1: Cannot delete yourself
+    if current_user.id == staff_id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+
+    # SECURITY CHECK 2: Cannot delete the last Super Admin (Brick Prevention)
+    if role == "superadmin":
+        sa_count = db.query(models.SuperAdmin).count()
+        if sa_count <= 1:
+            raise HTTPException(status_code=400, detail="Cannot delete the last Super Admin account. System requires at least one.")
 
     before = {"id": staff.id, "name": staff.name, "login_id": staff.login_id, "role": role}
     

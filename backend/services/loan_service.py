@@ -263,8 +263,8 @@ def get_report_summary(db: Session) -> schemas.ReportSummary:
     loans = db.query(models.Loan).all()
 
     total_books = sum(b.total for b in books)
-    active_checkouts = sum(1 for l in loans if _computed_status(l) in ("Active", "Overdue"))
-    overdue_loans = [l for l in loans if _computed_status(l) == "Overdue"]
+    active_checkouts = sum(1 for loan in loans if _computed_status(loan) in ("Active", "Overdue"))
+    overdue_loans = [loan for loan in loans if _computed_status(loan) == "Overdue"]
 
     overdue_students = [
         {

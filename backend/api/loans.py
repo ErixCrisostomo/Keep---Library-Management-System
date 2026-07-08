@@ -17,7 +17,7 @@ def list_loans(
     """Librarians see all loans; students see only their own."""
     student_id = None if current_user.role != "student" else current_user.id
     loans = loan_service.list_loans(db, student_id=student_id)
-    return [loan_service.to_loan_out(l) for l in loans]
+    return [loan_service.to_loan_out(loan) for loan in loans]
 
 
 # ── Librarian: walk-in checkout / direct return ────────────────────────────
