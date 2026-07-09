@@ -18,6 +18,7 @@ import { formatDate } from "@/lib/utils";
 import { useStudents } from "@/hooks/useStudents";
 import { api, ApiError } from "@/services/api";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import React from "react";
 
 
 
@@ -27,6 +28,7 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 
 function getTargetLabel(log: TxLog): string {
   if (log.book_title) return `"${log.book_title}"`;
+  if (log.type.includes("account") && log.details) return `${log.details.role || "Account"}: ${log.details.login_id || "N/A"}`;
   if (log.student_name && !log.book_title) return `${log.student_name}`;
   if (log.details?.target_type) return `${log.details.target_type}: ${log.details.target_name || log.details.target_id || ""}`;
   return "System";
@@ -35,38 +37,36 @@ function getTargetLabel(log: TxLog): string {
 function getContextDetails(log: TxLog): string {
   const parts: string[] = [];
 
-  // 1. Handle Book + Student combinations (Loans)
   if (log.student_name && log.book_title) {
     parts.push(`Student: ${log.student_name} (${log.student_login_id || "N/A"})`);
   } else if (log.student_name && !log.book_title) {
-    parts.push(`ID: ${log.student_login_id || "N/A"}`);
+    parts.push(`Student ID: ${log.student_login_id || "N/A"}`);
   }
 
-  // 2. Handle specific field changes for updates
+  if (log.type.includes("account") && log.details) {
+    if (log.details.role) parts.push(`Role: ${log.details.role}`);
+    if (log.details.action) parts.push(`Action: ${log.details.action}`);
+  }
+
   if (log.type.includes("update") && log.before_data && log.after_data) {
     const changes: string[] = [];
     for (const key in log.before_data) {
       if (log.before_data[key] !== log.after_data[key]) {
-        // Don't show ID changes to keep it concise
         if (key === "id") continue; 
         changes.push(`${key}: "${log.before_data[key]}" → "${log.after_data[key]}"`);
       }
     }
-    if (changes.length > 0) {
-      parts.push(`Changed: ${changes.join(", ")}`);
-    }
+    if (changes.length > 0) parts.push(`Changed: ${changes.join(", ")}`);
   }
 
-  // 3. Handle Deletion context
   if (log.type.includes("delete") && log.before_data) {
     const info = Object.entries(log.before_data)
       .filter(([k]) => k !== "id")
       .map(([k, v]) => `${k}: "${v}"`)
       .join(", ");
-    if (info) parts.push(`Deleted data: ${info}`);
+    if (info) parts.push(`Removed: ${info}`);
   }
 
-  // 4. Handle generic details (Reasons, Messages, IPs)
   if (log.details?.reason) parts.push(`Reason: ${log.details.reason}`);
   if (log.details?.message) parts.push(`Msg: ${log.details.message}`);
   if (log.ip_address) parts.push(`IP: ${log.ip_address}`);
@@ -145,6 +145,7 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
   const [auditQuery, setAuditQuery] = useState("");
   const [auditType, setAuditType] = useState<string>("all");
   const [auditPage, setAuditPage] = useState(1);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [auditSort, setAuditSort] = useState<"latest" | "oldest">("latest");
   const perPage = 20;
 
@@ -348,47 +349,67 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
                     const Icon = cfg.icon;
                     const target = getTargetLabel(log);
                     const context = getContextDetails(log);
+                    const isExpanded = expandedLogId === log.id;
                     
                     return (
-                      <tr key={log.id} className="hover:bg-muted/30 transition-colors">
-                        
-                        {/* WHEN & WHO */}
-                        <td className="px-4 py-3 align-top">
-                          <div className="font-mono text-foreground whitespace-nowrap">{formatDate(new Date(log.created_at))}</div>
-                          <div className="text-muted-foreground mt-1 truncate text-[11px]">
-                            {log.actor_name || "System"}
-                          </div>
-                        </td>
+                      <React.Fragment key={log.id}>
+                        {/* MAIN ROW */}
+                        <tr 
+                          className={`hover:bg-muted/50 transition-colors cursor-pointer ${isExpanded ? "bg-muted/30 border-b-0" : ""}`}
+                          onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                        >
+                          <td className="px-4 py-3 align-top">
+                            <div className="text-sm font-mono text-foreground whitespace-nowrap">{formatDate(new Date(log.created_at))}</div>
+                            <div className="text-xs text-muted-foreground mt-1 truncate">{log.actor_name || "System"}</div>
+                          </td>
+                          <td className="px-4 py-3 align-top">
+                            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium ${cfg.bg} ${cfg.border}`}>
+                              <Icon size={12} className={cfg.iconColor} />
+                              {cfg.label}
+                            </div>
+                            {log.loan_id && <div className="text-[10px] font-mono text-muted-foreground mt-1">Loan: {log.loan_id}</div>}
+                          </td>
+                          <td className="px-4 py-3 align-top text-sm text-foreground font-medium truncate max-w-[220px]">{target}</td>
+                          <td className="px-4 py-3 align-top text-xs text-muted-foreground truncate max-w-[300px]">{context}</td>
+                          <td className="px-4 py-3 align-top text-right font-mono text-xs text-muted-foreground">{log.id.split("-")[1]}</td>
+                        </tr>
 
-                        {/* EVENT TYPE (Compact Badge) */}
-                        <td className="px-4 py-3 align-top">
-                          <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium ${cfg.bg} ${cfg.border}`}>
-                            <Icon size={12} className={cfg.iconColor} />
-                            {cfg.label}
-                          </div>
-                          {log.loan_id && (
-                            <div className="text-[10px] font-mono text-muted-foreground mt-1">Loan: {log.loan_id}</div>
-                          )}
-                        </td>
-
-                        {/* TARGET (Dynamic) */}
-                        <td className="px-4 py-3 align-top text-foreground font-medium truncate">
-                          {target}
-                        </td>
-
-                        {/* CONTEXT & DETAILS (Dynamic) */}
-                        <td className="px-4 py-3 align-top text-muted-foreground">
-                          <div className="line-clamp-3 whitespace-pre-line text-[11px] leading-relaxed">
-                            {context}
-                          </div>
-                        </td>
-
-                        {/* LOG ID */}
-                        <td className="px-4 py-3 align-top text-right font-mono text-muted-foreground text-[11px]">
-                          {log.id.split("-")[1]}
-                        </td>
-
-                      </tr>
+                        {/* EXPANDED DETAILS ROW */}
+                        {isExpanded && (
+                          <tr className="bg-muted/20 hover:bg-muted/20 border-b border-border">
+                            <td colSpan={5} className="px-8 py-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                <div className="space-y-2">
+                                  <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Summary</h4>
+                                  <div className="bg-background p-3 rounded-lg border border-border text-xs whitespace-pre-wrap leading-relaxed text-foreground">{context}</div>
+                                </div>
+                                <div className="space-y-2">
+                                  <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Raw Data</h4>
+                                  {log.before_data && Object.keys(log.before_data).length > 0 && (
+                                    <div className="bg-background p-3 rounded-lg border border-border">
+                                      <div className="text-[10px] font-semibold text-orange-600 mb-1 uppercase">Before</div>
+                                      <pre className="text-xs text-foreground whitespace-pre-wrap break-words">{JSON.stringify(log.before_data, null, 2)}</pre>
+                                    </div>
+                                  )}
+                                  {log.after_data && Object.keys(log.after_data).length > 0 && (
+                                    <div className="bg-background p-3 rounded-lg border border-border mt-2">
+                                      <div className="text-[10px] font-semibold text-emerald-600 mb-1 uppercase">After</div>
+                                      <pre className="text-xs text-foreground whitespace-pre-wrap break-words">{JSON.stringify(log.after_data, null, 2)}</pre>
+                                    </div>
+                                  )}
+                                  {!log.before_data && !log.after_data && (
+                                    <div className="text-xs text-muted-foreground italic bg-background p-3 rounded-lg border border-border">No state changes recorded.</div>
+                                  )}
+                                  <div className="flex flex-wrap gap-2 mt-2 text-[10px] font-mono text-muted-foreground">
+                                    {log.ip_address && <span className="bg-background px-2 py-1 rounded border border-border">IP: {log.ip_address}</span>}
+                                    {log.source && <span className="bg-background px-2 py-1 rounded border border-border">Source: {log.source}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
@@ -451,7 +472,7 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
                     <th className="text-right px-4 py-3">ACTIONS</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border">
                   {combinedAccounts.map((a, idx) => (
                     <tr key={a.id} className={`${idx % 2 === 0 ? "" : "bg-card/40"} hover:bg-muted/30 border-b border-border`}>
                       <td className="px-4 py-3">
@@ -474,21 +495,11 @@ export function SuperAdminDashboard({ staff, books, loans, logs }: {
                       <td className="px-4 py-3 text-sm"><span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-3 py-1 text-[11px] font-medium">Active</span></td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {/* Main Admin can only be edited, not deleted */}
-                          <button 
-                            onClick={() => { setModalMode("edit"); setEditingAccount(a); setIsModalOpen(true); }} 
-                            className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors" 
-                            title="Edit Account"
-                          >
+                          <button onClick={() => { setModalMode("edit"); setEditingAccount(a); setIsModalOpen(true); }} className="p-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors" title="Edit Account">
                             <Pencil size={14} />
                           </button>
-                          
                           {a.login_id !== "mainadmin@email.com" && (
-                            <button 
-                              onClick={() => requestDelete(a)} 
-                              className="p-1.5 rounded-md border border-border text-destructive hover:bg-destructive/10 transition-colors" 
-                              title="Delete Account"
-                            >
+                            <button onClick={() => requestDelete(a)} className="p-1.5 rounded-md border border-border text-destructive hover:bg-destructive/10 transition-colors" title="Delete Account">
                               <Trash2 size={14} />
                             </button>
                           )}

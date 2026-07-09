@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from models import models, schemas
 from services import audit_service
+from types import SimpleNamespace
 
 
 def _next_book_id(db: Session) -> str:
@@ -103,13 +104,23 @@ def delete_book(db: Session, book_id: str, actor_name: str = "system") -> None:
     ).count()
     if active_loans > 0:
         raise HTTPException(status_code=400, detail="Cannot delete a book with active loans.")
-    before = {"id": book.id, "title": book.title, "author": book.author, "isbn": book.isbn, "genre": book.genre, "total": book.total, "available": book.available}
+    # Save details before deleting so the audit log knows what was removed
+    book_info = SimpleNamespace(id=book.id, title=book.title, author=book.author)
+    
+    before = {
+        "id": book.id, "title": book.title, "author": book.author, 
+        "isbn": book.isbn, "genre": book.genre, "total": book.total, "available": book.available
+    }
+    
     db.delete(book)
     db.commit()
+    
+    # Pass the dummy 'book_info' object to the audit service
     audit_service.log_tx(
         db=db,
         tx_type=models.TxTypeEnum.delete_book,
         actor_name=actor_name,
         details={"action": "delete_book"},
         before=before,
+        book=book_info 
     )

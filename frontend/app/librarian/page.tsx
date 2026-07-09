@@ -115,7 +115,7 @@ export default function LibrarianPage() {
         {libTab === "borrowed" && <BorrowedTab books={books} loans={loans} />}
         {libTab === "overdue" && <OverdueTab loans={loans} />}
         {libTab === "students" && <StudentsTab students={students} loans={loans} logs={logs} />}
-        {libTab === "history" && <HistoryTab logs={logs} />}
+        {libTab === "history" && <HistoryTab logs={logs} role="librarian" />}
         {libTab === "reports" && <ReportsTab books={books} loans={loans} logs={logs} students={students} />}
       </main>
       <footer className="border-t border-border py-4 px-4 md:px-6">

@@ -10,7 +10,7 @@ import { PER_PAGE } from "@/lib/constants";
 import { formatDateTime } from "@/lib/utils";
 import { Pager } from "@/components/Pager";
 
-export const TX_COLORS: Record<TxType, { bg: string; border: string; icon: React.ElementType; iconColor: string; label: string }> = {
+export const TX_COLORS: Record<string, { bg: string; border: string; icon: React.ElementType; iconColor: string; label: string }> = {
   // --- Loan Transactions ---
   request_borrow: { bg: "bg-blue-50", border: "border-blue-200", icon: BookMarked, iconColor: "text-blue-600", label: "Borrow Requested" },
   approve_borrow: { bg: "bg-emerald-50", border: "border-emerald-200", icon: ThumbsUp, iconColor: "text-emerald-600", label: "Borrow Approved" },
@@ -21,13 +21,13 @@ export const TX_COLORS: Record<TxType, { bg: string; border: string; icon: React
   direct_checkout: { bg: "bg-amber-50", border: "border-amber-200", icon: ArrowLeftRight, iconColor: "text-amber-700", label: "Direct Checkout" },
   direct_return: { bg: "bg-stone-50", border: "border-stone-300", icon: CheckCircle2, iconColor: "text-stone-600", label: "Direct Return" },
   
-  // --- Book Management (ADDED THESE) ---
+  // --- Book Management ---
   add_book: { bg: "bg-sky-50", border: "border-sky-200", icon: Plus, iconColor: "text-sky-600", label: "Book Added" },
   update_book: { bg: "bg-orange-50", border: "border-orange-200", icon: Pencil, iconColor: "text-orange-600", label: "Book Updated" },
   delete_book: { bg: "bg-rose-50", border: "border-rose-200", icon: Trash2, iconColor: "text-rose-600", label: "Book Deleted" },
   inventory_change: { bg: "bg-indigo-50", border: "border-indigo-200", icon: Package, iconColor: "text-indigo-600", label: "Inventory Change" },
 
-  // --- Auth & Accounts (ADDED THESE) ---
+  // --- Auth & Accounts ---
   login: { bg: "bg-gray-50", border: "border-gray-200", icon: LogIn, iconColor: "text-gray-600", label: "Login" },
   logout: { bg: "bg-gray-50", border: "border-gray-200", icon: LogOut, iconColor: "text-gray-600", label: "Logout" },
   create_account: { bg: "bg-lime-50", border: "border-lime-200", icon: UserPlus, iconColor: "text-lime-700", label: "Account Created" },
@@ -35,51 +35,55 @@ export const TX_COLORS: Record<TxType, { bg: string; border: string; icon: React
   delete_account: { bg: "bg-pink-50", border: "border-pink-200", icon: UserMinus, iconColor: "text-pink-600", label: "Account Deleted" },
 };
 
-export function HistoryTab({ logs, showStudentInfo = true }: { logs: TxLog[]; showStudentInfo?: boolean }) {
+interface HistoryTabProps {
+  logs: TxLog[];
+  showStudentInfo?: boolean;
+  role?: "librarian" | "superadmin"; // New prop to control visibility
+}
+
+export function HistoryTab({ logs, showStudentInfo = true, role = "superadmin" }: HistoryTabProps) {
   const [page, setPage] = useState(1);
   const [sortOrder, setSortOrder] = useState<"latest" | "oldest">("latest");
-  
-  // UPDATED: Added books, auth, and accounts to default filters
-  const [filters, setFilters] = useState({ 
-    borrow: true, request: true, approved: true, rejected: true, direct: true, returns: true, 
-    books: true, auth: true, accounts: true 
-  });
-  
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [q, setQ] = useState("");
 
-  // UPDATED: Added new categories so the filter logic knows where to put them
-  const CATEGORY_MAP: Record<string, TxType[]> = {
-    borrow: ["request_borrow", "approve_borrow", "reject_borrow"],
-    request: ["request_borrow", "request_return"],
-    approved: ["approve_borrow", "approve_return"],
-    rejected: ["reject_borrow", "reject_return"],
-    direct: ["direct_checkout", "direct_return"],
-    returns: ["request_return", "approve_return", "reject_return", "direct_return"],
-    books: ["add_book", "update_book", "delete_book", "inventory_change"],
-    auth: ["login", "logout"],
-    accounts: ["create_account", "update_account", "delete_account"],
+  // 1. Security: Types that Librarians are strictly forbidden from seeing
+  const LIBRARIAN_HIDDEN_TYPES = ["login", "logout", "create_account", "update_account", "delete_account"];
+  const roleFilteredLogs = role === "librarian" 
+    ? logs.filter(l => !LIBRARIAN_HIDDEN_TYPES.includes(l.type))
+    : logs;
+
+  // 2. Helper to resolve category ID to actual TxTypes
+  const getCategoryTypes = (id: string): TxType[] | null => {
+    switch (id) {
+      case "all": return null;
+      case "all_borrows": return ["request_borrow", "approve_borrow", "reject_borrow", "direct_checkout"];
+      case "borrow_requested": return ["request_borrow"];
+      case "borrow_approved": return ["approve_borrow", "direct_checkout"];
+      case "borrow_rejected": return ["reject_borrow"];
+      
+      case "all_returns": return ["request_return", "approve_return", "reject_return", "direct_return"];
+      case "return_requested": return ["request_return"];
+      case "return_approved": return ["approve_return", "direct_return"];
+      case "return_rejected": return ["reject_return"];
+      
+      case "all_books": return ["add_book", "update_book", "delete_book", "inventory_change"];
+      case "book_addded": return ["add_book"];
+      case "book_updated": return ["update_book"];
+      case "book_deleted": return ["delete_book"];
+      
+      case "all_auth": return ["login", "logout"];
+      case "all_accounts": return ["create_account", "update_account", "delete_account"];
+      default: return null;
+    }
   };
 
-  const selectedKeys = Object.entries(filters).filter(([, v]) => v).map(([k]) => k);
-  const scopeKeys = ["borrow", "returns", "direct", "books", "auth", "accounts"]; // UPDATED
-  const statusKeys = ["approved", "rejected", "request"];
-  const selectedScopes = selectedKeys.filter((k) => scopeKeys.includes(k));
-  const selectedStatuses = selectedKeys.filter((k) => statusKeys.includes(k));
+  const activeTypes = getCategoryTypes(selectedCategory) || [];
 
-  let activeTypes: TxType[] = [];
-  if (selectedScopes.length > 0 && selectedStatuses.length > 0) {
-    const typesInScopes = Array.from(new Set(selectedScopes.flatMap((k) => CATEGORY_MAP[k] ?? [])));
-    const typesInStatuses = Array.from(new Set(selectedStatuses.flatMap((k) => CATEGORY_MAP[k] ?? [])));
-    activeTypes = typesInScopes.filter((t) => typesInStatuses.includes(t));
-  } else if (selectedScopes.length > 0) {
-    activeTypes = Array.from(new Set(selectedScopes.flatMap((k) => CATEGORY_MAP[k] ?? [])));
-  } else if (selectedStatuses.length > 0) {
-    activeTypes = Array.from(new Set(selectedStatuses.flatMap((k) => CATEGORY_MAP[k] ?? [])));
-  } else {
-    activeTypes = [];
-  }
 
-  const filteredByType = activeTypes.length > 0 ? logs.filter((l) => activeTypes.includes(l.type)) : [];
+  const filteredByType = activeTypes.length > 0 
+    ? roleFilteredLogs.filter((l) => activeTypes.includes(l.type)) 
+    : roleFilteredLogs;
 
   const qNorm = q.trim().toLowerCase();
   const matchesQuery = (l: TxLog) => {
@@ -111,54 +115,54 @@ export function HistoryTab({ logs, showStudentInfo = true }: { logs: TxLog[]; sh
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold flex items-center gap-2"><History size={16} className="text-primary" />Transaction Log</h2>
-        <span className="text-xs font-mono text-muted-foreground">{logs.length} transaction{logs.length !== 1 ? "s" : ""}</span>
+        <span className="text-xs font-mono text-muted-foreground">{roleFilteredLogs.length} transaction{roleFilteredLogs.length !== 1 ? "s" : ""}</span>
       </div>
       
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-2 bg-card border border-border rounded-lg">
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-1">
           <input
             value={q}
             onChange={(e) => { setQ(e.target.value); setPage(1); }}
             placeholder="Search date, time, title, author, type..."
             className="w-full md:w-72 px-3 py-2.5 text-sm bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30 text-foreground"
           />
-          <span className="text-xs text-muted-foreground mr-1">Show:</span>
           
-          {/* Original Filters */}
-          <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${filters.borrow ? "border-amber-200 bg-amber-50" : "border-border bg-transparent"}`}>
-            <input type="checkbox" checked={filters.borrow} onChange={(e) => { setFilters((s) => ({ ...s, borrow: e.target.checked })); setPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background focus:outline-none focus:ring-2 focus:ring-ring/30" />
-            <span className="select-none">Borrow</span>
-          </label>
-          <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${filters.request ? "border-amber-200 bg-amber-50" : "border-border bg-transparent"}`}>
-            <input type="checkbox" checked={filters.request} onChange={(e) => { setFilters((s) => ({ ...s, request: e.target.checked })); setPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background focus:outline-none focus:ring-2 focus:ring-ring/30" />
-            <span className="select-none">Request</span>
-          </label>
-          <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${filters.approved ? "border-amber-200 bg-amber-50" : "border-border bg-transparent"}`}>
-            <input type="checkbox" checked={filters.approved} onChange={(e) => { setFilters((s) => ({ ...s, approved: e.target.checked })); setPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background focus:outline-none focus:ring-2 focus:ring-ring/30" />
-            <span className="select-none">Approved</span>
-          </label>
-          <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${filters.rejected ? "border-amber-200 bg-amber-50" : "border-border bg-transparent"}`}>
-            <input type="checkbox" checked={filters.rejected} onChange={(e) => { setFilters((s) => ({ ...s, rejected: e.target.checked })); setPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background focus:outline-none focus:ring-2 focus:ring-ring/30" />
-            <span className="select-none">Rejected</span>
-          </label>
-          <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${filters.direct ? "border-amber-200 bg-amber-50" : "border-border bg-transparent"}`}>
-            <input type="checkbox" checked={filters.direct} onChange={(e) => { setFilters((s) => ({ ...s, direct: e.target.checked })); setPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background focus:outline-none focus:ring-2 focus:ring-ring/30" />
-            <span className="select-none">Direct</span>
-          </label>
-          <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${filters.returns ? "border-amber-200 bg-amber-50" : "border-border bg-transparent"}`}>
-            <input type="checkbox" checked={filters.returns} onChange={(e) => { setFilters((s) => ({ ...s, returns: e.target.checked })); setPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background focus:outline-none focus:ring-2 focus:ring-ring/30" />
-            <span className="select-none">Returns</span>
-          </label>
+          {/* Grouped Category Dropdown */}
+          <select
+            value={selectedCategory}
+            onChange={(e) => { setSelectedCategory(e.target.value); setPage(1); }}
+            className="text-sm px-3 py-2.5 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/30 text-foreground"
+          >
+            <option value="all">All Transactions</option>
+            
+            <optgroup label="Borrows">
+              <option value="all_borrows">All Borrows</option>
+              <option value="borrow_requested">Requested</option>
+              <option value="borrow_approved">Approved</option>
+              <option value="borrow_rejected">Rejected</option>
+            </optgroup>
 
-          {/* ADDED NEW FILTER BUTTONS */}
-          <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${filters.books ? "border-sky-200 bg-sky-50" : "border-border bg-transparent"}`}>
-            <input type="checkbox" checked={filters.books} onChange={(e) => { setFilters((s) => ({ ...s, books: e.target.checked })); setPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background focus:outline-none focus:ring-2 focus:ring-ring/30" />
-            <span className="select-none">Books</span>
-          </label>
-          <label className={`inline-flex items-center gap-2 text-sm px-2 py-1 rounded-md border ${filters.auth ? "border-gray-200 bg-gray-50" : "border-border bg-transparent"}`}>
-            <input type="checkbox" checked={filters.auth} onChange={(e) => { setFilters((s) => ({ ...s, auth: e.target.checked })); setPage(1); }} className="w-4 h-4 rounded border border-border bg-input-background focus:outline-none focus:ring-2 focus:ring-ring/30" />
-            <span className="select-none">Auth</span>
-          </label>
+            <optgroup label="Returns">
+              <option value="all_returns">All Returns</option>
+              <option value="return_requested">Requested</option>
+              <option value="return_approved">Approved</option>
+              <option value="return_rejected">Rejected</option>
+            </optgroup>
+
+            <optgroup label="Books">
+              <option value="all_books">All Book Management</option>
+              <option value="book_addded">Added</option>
+              <option value="book_updated">Updated</option>
+              <option value="book_deleted">Deleted</option>            
+            </optgroup>
+
+            {role === "superadmin" && (
+              <optgroup label="System Administration">
+                <option value="all_auth">All Auth & Sessions</option>
+                <option value="all_accounts">All Account Management</option>
+              </optgroup>
+            )}
+          </select>
         </div>
 
         <div className="flex items-center gap-2">
@@ -174,14 +178,13 @@ export function HistoryTab({ logs, showStudentInfo = true }: { logs: TxLog[]; sh
         </div>
       </div>
 
-      {logs.length === 0 ? (
+      {roleFilteredLogs.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground text-sm border border-dashed border-border rounded-xl">No transactions recorded yet.</div>
       ) : sorted.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground text-sm border border-dashed border-border rounded-xl">No transactions match your filters.</div>
       ) : (
         <div className="flex flex-col gap-2">
           {paged.map((log) => {
-            // FIXED: Added fallback safe defaults in case an unknown type appears in the future
             const cfg = TX_COLORS[log.type] || { bg: "bg-gray-50", border: "border-gray-200", icon: History, iconColor: "text-gray-600", label: log.type };
             const Icon = cfg.icon;
             
@@ -199,7 +202,6 @@ export function HistoryTab({ logs, showStudentInfo = true }: { logs: TxLog[]; sh
                         <span className="text-muted-foreground"> by {log.author}</span>
                       </div>
                       
-                      {/* FIXED: Only show Student line if a student is actually involved */}
                       {showStudentInfo && log.student_name && (
                         <div className="text-xs text-muted-foreground mt-1 truncate">
                           Student: <span className="font-medium">{log.student_name}</span> · <span className="font-mono">{log.student_login_id}</span>
@@ -210,7 +212,6 @@ export function HistoryTab({ logs, showStudentInfo = true }: { logs: TxLog[]; sh
                     <div className="flex flex-col items-start gap-1 text-left md:items-end md:text-right">
                       {log.loan_id && <span className="text-[10px] font-mono text-muted-foreground bg-white/60 px-1.5 py-0.5 rounded">{log.loan_id}</span>}
                       <span className="text-[10px] font-mono text-muted-foreground">{formatDateTime(String(log.created_at))}</span>
-                      {/* Actor name (Librarian/SuperAdmin) will always show up here now */}
                       <span className="text-[10px] font-mono text-muted-foreground">by {log.actor_name}</span>
                     </div>
                   </div>
